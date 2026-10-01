@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { eventsApi } from './API';
-import { getBrandLogo } from '../constants/brandLogos';
 
 const normalizeEvent = (event) => ({
   id: event.id,
@@ -51,7 +50,7 @@ export function useEventHubData(limit = 500) {
   const data = useMemo(() => {
     return (payload.sources || []).map((source) => ({
       ...source,
-      logo: getBrandLogo(source.id, source.name, source.logo),
+      logo: source.logo || '/img/mtm.jpg',
       events: (source.events || []).map(normalizeEvent),
     }));
   }, [payload]);

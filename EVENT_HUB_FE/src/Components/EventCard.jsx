@@ -1,11 +1,10 @@
 import React from 'react';
 import { Clock, ChevronRight } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { getBrandLogo } from '../constants/brandLogos';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 export default function EventCard({ data, onOpenDetail }) {
-  const logoUrl = getBrandLogo(data?.id, data?.name, data?.logo);
+  const logoUrl = data?.logo || '/img/mtm.jpg';
 
   return (
     <div className="flex flex-col md:grid md:grid-cols-[160px_1fr_150px] bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs hover:border-slate-300 transition-all">
@@ -18,7 +17,8 @@ export default function EventCard({ data, onOpenDetail }) {
             src={logoUrl}
             alt={data.name}
             onError={(e) => {
-              e.currentTarget.src = getBrandLogo(data?.id, data?.name);
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = '/img/mtm.jpg';
             }}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-xs"
           />

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot, Users, Send, Sliders, Building2, X } from 'lucide-react';
 import { settingsApi, usersApi } from '../API/API';
 import { useEventHubData } from '../API/useEventHubData';
-import { DEFAULT_DEPARTMENTS } from '../constants/departments';
+import { DEFAULT_DEPARTMENTS } from '../utils/departments';
 
 // Tabs
 import CrawlerTab from './Settings/tabs/CrawlerTab';

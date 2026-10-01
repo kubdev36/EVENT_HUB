@@ -44,7 +44,6 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
           </button>
         </header>
 
-        {/* Thêm flex-1 min-h-0 và overflow-y-auto để kích hoạt thanh cuộn cho toàn bộ nội dung con */}
         <main className="flex-1 min-h-0 overflow-y-auto bg-[#f8fafc]">
           {children}
         </main>

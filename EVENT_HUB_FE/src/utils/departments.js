@@ -1,9 +1,3 @@
-export const DEFAULT_DEPARTMENTS = [
-  { code: 'mkt', name: 'Marketing', desc: 'Quảng cáo, Sự kiện, Minigame' },
-  { code: 'kinh_doanh', name: 'Kinh doanh', desc: 'Khuyến mãi, Ra mắt, Mở bán' },
-  { code: 'internal', name: 'Sự kiện nội bộ', desc: 'Nội bộ Minh Tuấn Mobile' },
-];
-
 export function normalizeDepartment(value) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
 
@@ -13,3 +7,9 @@ export function normalizeDepartment(value) {
 
   return normalized;
 }
+
+export const DEFAULT_DEPARTMENTS = [
+  { code: 'mkt', name: 'Marketing', desc: 'Quảng cáo, Sự kiện, Minigame' },
+  { code: 'kinh_doanh', name: 'Kinh doanh', desc: 'Khuyến mãi, Ra mắt, Mở bán' },
+  { code: 'internal', name: 'Sự kiện nội bộ', desc: 'Nội bộ Minh Tuấn Mobile' },
+];

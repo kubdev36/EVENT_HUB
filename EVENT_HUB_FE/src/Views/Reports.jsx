@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { useEventHubData } from '../API/useEventHubData';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { getBrandLogo } from '../constants/brandLogos';
 
 export default function Reports() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -319,9 +318,12 @@ export default function Reports() {
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 bg-white border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 rounded-lg">
                     <img
-                      src={getBrandLogo(brand.id, brand.name, brand.logo)}
+                      src={brand.logo || '/img/mtm.jpg'}
                       alt={brand.name}
-                      onError={(e) => { e.currentTarget.src = getBrandLogo(brand.id, brand.name); }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/img/mtm.jpg';
+                      }}
                       className="w-full h-full object-contain"
                     />
                   </div>

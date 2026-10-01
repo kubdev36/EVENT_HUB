@@ -16,8 +16,7 @@ import {
 } from 'lucide-react';
 import { useEventHubData } from '../API/useEventHubData';
 import { settingsApi } from '../API/API';
-import { getBrandLogo } from '../constants/brandLogos';
-import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../constants/departments';
+import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../utils/departments';
 import { useFilterContext } from '../context/FilterContext';
 
 const BASE_MENU_TOP = [
@@ -213,9 +212,12 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                   className="flex items-center gap-2.5 px-1 py-1 rounded-md hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700 transition"
                 >
                   <img
-                    src={getBrandLogo(item.id, item.name, item.logo)}
+                    src={item.logo || '/img/mtm.jpg'}
                     alt={item.name}
-                    onError={(e) => { e.currentTarget.src = getBrandLogo(item.id, item.name); }}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = '/img/mtm.jpg';
+                    }}
                     className="w-4 h-4 rounded object-contain border border-slate-100 bg-white"
                   />
                   <span className="truncate">{item.name}</span>

@@ -14,7 +14,6 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getBrandLogo } from '../constants/brandLogos';
 import { useEventHubData } from '../API/useEventHubData';
 
 import { useFilterContext } from '../context/FilterContext';
@@ -58,7 +57,7 @@ export default function Overview() {
       brandStats: list.map((b) => ({
         id: b.id,
         name: b.name,
-        logo: getBrandLogo(b.id, b.name, b.logo),
+        logo: b.logo || '/img/mtm.jpg',
         events: (b.events || []).length,
       })),
       calendar: {

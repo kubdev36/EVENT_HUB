@@ -1,6 +1,5 @@
 import React from 'react';
 import { Bot, Plus, Play, Loader2, Edit2, Trash2, Clock } from 'lucide-react';
-import { getBrandLogo } from '../../../constants/brandLogos';
 
 export default function CrawlerTab({
   crawlers = [],
@@ -51,10 +50,11 @@ export default function CrawlerTab({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <img
-                  src={getBrandLogo(c.id, c.name, c.logo)}
+                  src={c.logo || '/img/mtm.jpg'}
                   alt={c.name}
                   onError={(e) => {
-                    e.currentTarget.src = getBrandLogo(c.id, c.name);
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = '/img/mtm.jpg';
                   }}
                   className="w-8 h-8 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0"
                 />

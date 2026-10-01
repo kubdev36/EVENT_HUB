@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { X, Clock, FileEdit, ExternalLink } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { getBrandLogo } from '../constants/brandLogos';
 
 export default function EventDetail({ data, onClose }) {
   const [activeTab, setActiveTab] = useState('events');
 
   if (!data) return null;
 
-  const logoUrl = getBrandLogo(data?.id, data?.name, data?.logo);
+  const logoUrl = data?.logo || '/img/mtm.jpg';
 
   const getFormattedDate = () => {
     const dateStr = data.events?.[0]?.date;
@@ -32,7 +31,7 @@ export default function EventDetail({ data, onClose }) {
         <div className="shrink-0 bg-white">
           <div className="h-14 px-3.5 sm:px-4 flex items-center justify-between border-b border-slate-100">
             <div className="flex items-center gap-2 min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">{data.name}</h2>
+              <h2 className="text-sm sm:base font-bold text-slate-900 truncate">{data.name}</h2>
               <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-medium bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
                 {data.tag || 'Đối thủ'}
               </span>
@@ -49,7 +48,10 @@ export default function EventDetail({ data, onClose }) {
             <img
               src={logoUrl}
               alt={data.name}
-              onError={(e) => { e.currentTarget.src = getBrandLogo(data?.id, data?.name); }}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = '/img/mtm.jpg';
+              }}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 shrink-0 shadow-2xs p-0.5 bg-white"
             />
             <div className="min-w-0">

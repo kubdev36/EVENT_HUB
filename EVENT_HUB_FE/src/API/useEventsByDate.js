@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { eventsApi } from './API';
-import { getBrandLogo } from '../constants/brandLogos';
 
 export function useEventsByDate(date) {
   const [payload, setPayload] = useState({ sources: [], totalEvents: 0, totalSources: 0 });
@@ -33,7 +32,7 @@ export function useEventsByDate(date) {
   const sources = useMemo(() => {
     return (payload.sources || []).map((source) => ({
       ...source,
-      logo: getBrandLogo(source.id, source.name, source.logo),
+      logo: source.logo || '/img/mtm.jpg',
     }));
   }, [payload]);
 

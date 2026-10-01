@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useEventHubData } from '../API/useEventHubData';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { getBrandLogo } from '../constants/brandLogos';
 
 export default function MediaLibrary() {
   const [selectedSegment, setSelectedSegment] = useState('all');
@@ -53,7 +52,7 @@ export default function MediaLibrary() {
             url: e.url,
             brandId: brand.id,
             brandName: brand.name,
-            brandLogo: getBrandLogo(brand.id, brand.name, brand.logo),
+            brandLogo: brand.logo || '/img/mtm.jpg',
           }))
       )
       .sort((a, b) => {
