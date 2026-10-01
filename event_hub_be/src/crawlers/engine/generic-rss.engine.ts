@@ -26,19 +26,21 @@ export class GenericRssEngine {
       const itemNode = $(el);
       const title = NoiseFilterHelper.cleanTitle(itemNode.find('title').text().trim());
       const link = itemNode.find('link').text().trim() || itemNode.find('guid').text().trim();
-      const descRaw = itemNode.find('description, content\\:encoded').text().trim();
+      const descRaw = itemNode.find('description').text().trim() || itemNode.find('encoded').text().trim() || itemNode.html() || '';
       const pubDateText = itemNode.find('pubDate, dc\\:date').text().trim();
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
-      // Extract image
+      // Extract image from tags or HTML
       let image = itemNode.find('enclosure[type*="image"]').attr('url') ||
+                  itemNode.find('enclosure').attr('url') ||
                   itemNode.find('media\\:content[medium="image"]').attr('url') ||
+                  itemNode.find('media\\:content').attr('url') ||
                   itemNode.find('media\\:thumbnail').attr('url') || null;
 
       if (!image && descRaw) {
-        const descMatch = descRaw.match(/<img[^>]+src=["']([^"']+)["']/i);
-        if (descMatch) image = descMatch[1];
+        const descMatch = descRaw.match(/<img[^>]+src=["']([^"']+)["']/i) || descRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
+        if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
       const parsedDate = DateExtractorHelper.parsePublishedDate(pubDateText);
@@ -59,15 +61,18 @@ export class GenericRssEngine {
       const entryNode = $(el);
       const title = NoiseFilterHelper.cleanTitle(entryNode.find('title').text().trim());
       const link = entryNode.find('link[rel="alternate"]').attr('href') || entryNode.find('link').attr('href') || '';
-      const summary = entryNode.find('summary, content').text().trim();
+      const contentRaw = entryNode.find('content').text() || entryNode.find('summary').text() || entryNode.html() || '';
       const published = entryNode.find('published, updated').text().trim();
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
-      let image = entryNode.find('link[rel="enclosure"]').attr('href') || null;
-      if (!image && summary) {
-        const descMatch = summary.match(/<img[^>]+src=["']([^"']+)["']/i);
-        if (descMatch) image = descMatch[1];
+      let image = entryNode.find('link[rel="enclosure"]').attr('href') ||
+                  entryNode.find('enclosure').attr('url') ||
+                  entryNode.find('media\\:content').attr('url') || null;
+
+      if (!image && contentRaw) {
+        const descMatch = contentRaw.match(/<img[^>]+src=["']([^"']+)["']/i) || contentRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
+        if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
       const parsedDate = DateExtractorHelper.parsePublishedDate(published);
@@ -75,7 +80,7 @@ export class GenericRssEngine {
         title,
         url: link,
         image: image && !NoiseFilterHelper.isNoiseImage(image) ? image : null,
-        description: NoiseFilterHelper.cleanDescription(summary),
+        description: NoiseFilterHelper.cleanDescription(contentRaw),
         eventDate: parsedDate?.date || null,
         eventTime: parsedDate?.time || null,
         rawData: { sourceUrl: resp.url, kind: 'atom' },
@@ -105,6 +110,38 @@ export class GenericRssEngine {
       });
     }
 
+    // 4. Auto-enrich missing images from target article og:image
+    await this.enrichMissingImages(items);
+
     return items;
+  }
+
+  private async enrichMissingImages(items: ParsedCrawlItem[]): Promise<void> {
+    const missing = items.filter((it) => !it.image && it.url && it.url.startsWith('http'));
+    if (missing.length === 0) return;
+
+    // Fetch og:image for missing items in small batches
+    const limit = 8;
+    for (let i = 0; i < missing.length; i += limit) {
+      const batch = missing.slice(i, i + limit);
+      await Promise.all(
+        batch.map(async (item) => {
+          try {
+            const resp = await this.httpClient.fetchHtml(item.url);
+            if (resp?.html) {
+              const $page = cheerio.load(resp.html);
+              const ogImg =
+                $page('meta[property="og:image"]').attr('content') ||
+                $page('meta[name="twitter:image"]').attr('content') ||
+                $page('article img, .post-content img').first().attr('src') ||
+                null;
+              if (ogImg && !NoiseFilterHelper.isNoiseImage(ogImg)) {
+                item.image = UrlNormalizerHelper.resolveUrl(item.url, ogImg);
+              }
+            }
+          } catch {}
+        }),
+      );
+    }
   }
 }
