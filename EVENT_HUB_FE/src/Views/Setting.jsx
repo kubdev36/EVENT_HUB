@@ -1,53 +1,51 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import {
-  Bot,
-  Users,
-  Send,
-  Sliders,
-  Building2,
-  Plus,
-  Edit2,
-  Trash2,
-  KeyRound,
-  Play,
-  Clock,
-  X,
-  Loader2,
-  ArrowRight,
-  ExternalLink,
-  AlertTriangle,
-  Upload,
-  Image as ImageIcon,
-} from 'lucide-react';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../constants/departments';
+import React, { useEffect, useState } from 'react';
+import { Bot, Users, Send, Sliders, Building2, X } from 'lucide-react';
 import { settingsApi, usersApi } from '../API/API';
 import { useEventHubData } from '../API/useEventHubData';
-import { getBrandLogo } from '../constants/brandLogos';
+import { DEFAULT_DEPARTMENTS } from '../constants/departments';
+
+// Tabs
+import CrawlerTab from './Settings/tabs/CrawlerTab';
+import UsersTab from './Settings/tabs/UsersTab';
+import TelegramTab from './Settings/tabs/TelegramTab';
+import KeywordsTab from './Settings/tabs/KeywordsTab';
+import DepartmentsTab from './Settings/tabs/DepartmentsTab';
+
+// Modals
+import CrawlPreviewModal from './Settings/modals/CrawlPreviewModal';
+import CrawlerModal from './Settings/modals/CrawlerModal';
+import UserModal from './Settings/modals/UserModal';
+import DepartmentModal from './Settings/modals/DepartmentModal';
+import KeywordModal from './Settings/modals/KeywordModal';
+import ConfirmDeleteModal from './Settings/modals/ConfirmDeleteModal';
 
 const EMPTY_TELEGRAM_CONFIG = { botToken: '', chatId: '', notifyImmediately: false, includeImage: false };
 
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
-  const [crawlTarget, setCrawlTarget] = useState(null);
-  const [crawlLoading, setCrawlLoading] = useState(false);
-  const [crawlResult, setCrawlResult] = useState(null);
   const { data: eventHubData } = useEventHubData();
+
+  // Data states
   const [crawlers, setCrawlers] = useState([]);
   const [users, setUsers] = useState([]);
   const [telegramConfig, setTelegramConfig] = useState(EMPTY_TELEGRAM_CONFIG);
   const [keywordRules, setKeywordRules] = useState([]);
   const [departmentRules, setDepartmentRules] = useState([]);
   const [departmentsList, setDepartmentsList] = useState(DEFAULT_DEPARTMENTS);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
 
-  const [modalMode, setModalMode] = useState(null);
+  // Status & loading states
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [crawlTarget, setCrawlTarget] = useState(null);
+  const [crawlLoading, setCrawlLoading] = useState(false);
+  const [crawlResult, setCrawlResult] = useState(null);
+
+  // Modal control states
+  const [modalMode, setModalMode] = useState(null); // 'add-crawler'|'edit-crawler'|'delete-crawler'|'add-user'|'edit-user'|'delete-user'|'reset-pass'|'edit-keyword'|'add-department'|'edit-department'|'delete-department'
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({});
 
+  // Initialize crawlers from eventHubData
   useEffect(() => {
     setCrawlers(
       eventHubData
@@ -58,17 +56,17 @@ export default function Setting() {
           logo: comp.logo,
           enabled: true,
           interval: '6h',
-          lastRun: 'Chua co du lieu',
+          lastRun: 'Chưa có dữ liệu',
           targetUrls: comp.targetUrls || [],
           events: comp.events || [],
         }))
     );
   }, [eventHubData]);
 
+  // Load all settings & users
   useEffect(() => {
     let active = true;
     const load = async () => {
-      setUsersLoading(true);
       try {
         const [settingsRes, usersRes] = await Promise.all([
           settingsApi.getAll(),
@@ -89,7 +87,7 @@ export default function Setting() {
             settings.crawler_sources.map((item) => ({
               ...item,
               events: eventHubData.find((brand) => brand.id === item.id)?.events || [],
-              lastRun: item.lastRun || 'Chua co du lieu',
+              lastRun: item.lastRun || 'Chưa có dữ liệu',
             }))
           );
         }
@@ -106,9 +104,7 @@ export default function Setting() {
           }))
         );
       } catch (err) {
-        setStatusMessage(err.response?.data?.message || 'Khong tai duoc cau hinh.');
-      } finally {
-        if (active) setUsersLoading(false);
+        setStatusMessage(err.response?.data?.message || 'Không tải được cấu hình.');
       }
     };
     load();
@@ -117,8 +113,34 @@ export default function Setting() {
     };
   }, [eventHubData]);
 
+  const reloadUsers = async () => {
+    try {
+      const res = await usersApi.list();
+      const list = Array.isArray(res.data) ? res.data : [];
+      setUsers(
+        list.map((u) => ({
+          id: u.id,
+          name: u.email,
+          email: u.email,
+          department: u.department || 'mkt',
+          role: u.role === 'admin' ? 'Admin' : 'Staff',
+          status: u.isActive ? 'active' : 'inactive',
+        }))
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  // Crawl execution
   const openCrawlPopup = (crawler) => {
     setCrawlTarget(crawler);
+    setCrawlResult(null);
+  };
+
+  const closeCrawlPopup = () => {
+    setCrawlTarget(null);
+    setCrawlLoading(false);
     setCrawlResult(null);
   };
 
@@ -151,81 +173,7 @@ export default function Setting() {
     }
   };
 
-  const closePopup = () => {
-    setCrawlTarget(null);
-    setCrawlLoading(false);
-    setCrawlResult(null);
-  };
-
-  const formatEventDate = (dateStr) => {
-    if (!dateStr) return '';
-    const [y, m, d] = dateStr.split('-');
-    if (!y || !m || !d) return dateStr;
-    return `${d}/${m}/${y}`;
-  };
-
-  const handleOpenModal = (mode, item = null) => {
-    setModalMode(mode);
-    setSelectedItem(item);
-    if (item) {
-      setFormData({ 
-        ...item, 
-        password: item.password || '••••••••',
-        targetUrls: item.targetUrls ? [...item.targetUrls] : [''] 
-      });
-    } else {
-      if (mode === 'add-crawler') setFormData({ name: '', logo: '', interval: '6h', targetUrls: [''] });
-      if (mode === 'add-user') setFormData({ name: '', email: '', password: '', department: departmentsList[0]?.code || 'mkt', role: 'Staff' });
-      if (mode === 'add-department') setFormData({ code: '', name: '', desc: '' });
-      if (mode === 'edit-department') setFormData({ code: item?.code || '', name: item?.name || '', desc: item?.desc || '' });
-    }
-  };
-
-  const handleCloseModal = () => {
-    setModalMode(null);
-    setSelectedItem(null);
-    setFormData({});
-  };
-
-  const handleAddUrlField = () => {
-    const urls = formData.targetUrls || [];
-    setFormData({ ...formData, targetUrls: [...urls, ''] });
-  };
-
-  const handleUrlChange = (index, value) => {
-    const urls = [...(formData.targetUrls || [])];
-    urls[index] = value;
-    setFormData({ ...formData, targetUrls: urls });
-  };
-
-  const handleRemoveUrlField = (index) => {
-    const urls = [...(formData.targetUrls || [])];
-    urls.splice(index, 1);
-    setFormData({ ...formData, targetUrls: urls.length ? urls : [''] });
-  };
-
-  const reloadUsers = async () => {
-    setUsersLoading(true);
-    try {
-      const res = await usersApi.list();
-      const list = Array.isArray(res.data) ? res.data : [];
-      setUsers(
-        list.map((u) => ({
-          id: u.id,
-          name: u.email,
-          email: u.email,
-          department: u.department || 'mkt',
-          role: u.role === 'admin' ? 'Admin' : 'Staff',
-          status: u.isActive ? 'active' : 'inactive',
-        }))
-      );
-    } catch {
-      // ignore user load error
-    } finally {
-      setUsersLoading(false);
-    }
-  };
-
+  // Handlers for Crawlers
   const handleSaveCrawlersList = async (updatedCrawlers) => {
     setCrawlers(updatedCrawlers);
     setSettingsSaving(true);
@@ -254,6 +202,7 @@ export default function Setting() {
     handleSaveCrawlersList(updated);
   };
 
+  // Handlers for Telegram
   const handleSaveTelegramConfig = async () => {
     setSettingsSaving(true);
     try {
@@ -278,6 +227,7 @@ export default function Setting() {
     }
   };
 
+  // Handlers for Departments
   const handleToggleDepartment = (type, deptKey) => {
     setDepartmentRules((prev) =>
       prev.map((rule) => {
@@ -294,7 +244,7 @@ export default function Setting() {
     setSettingsSaving(true);
     try {
       await settingsApi.saveDepartments({ rules: departmentRules, list: departmentsList });
-      setStatusMessage('Đã lưu phân loại phòng ban thành công.');
+      setStatusMessage('Đã lưu phân loại và danh sách phòng ban thành công.');
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Lưu phân loại phòng ban thất bại.');
     } finally {
@@ -302,7 +252,32 @@ export default function Setting() {
     }
   };
 
-  const handleSaveData = async () => {
+  // Open & Close Modal
+  const handleOpenModal = (mode, item = null) => {
+    setModalMode(mode);
+    setSelectedItem(item);
+    if (item) {
+      setFormData({
+        ...item,
+        password: item.password || '••••••••',
+        targetUrls: item.targetUrls ? [...item.targetUrls] : [''],
+      });
+    } else {
+      if (mode === 'add-crawler') setFormData({ name: '', logo: '', interval: '6h', targetUrls: [''] });
+      if (mode === 'add-user') setFormData({ name: '', email: '', password: '', department: departmentsList[0]?.code || 'mkt', role: 'Staff' });
+      if (mode === 'add-department') setFormData({ code: '', name: '', desc: '' });
+      if (mode === 'edit-department') setFormData({ code: item?.code || '', name: item?.name || '', desc: item?.desc || '' });
+    }
+  };
+
+  const handleCloseModal = () => {
+    setModalMode(null);
+    setSelectedItem(null);
+    setFormData({});
+  };
+
+  // Modal Save actions
+  const handleSaveModal = async () => {
     setSettingsSaving(true);
     try {
       if (modalMode === 'add-crawler') {
@@ -350,7 +325,7 @@ export default function Setting() {
       } else if (modalMode === 'delete-user') {
         await usersApi.remove(selectedItem.id);
         await reloadUsers();
-        setStatusMessage(`Đã xóa tài khoản nhân viên.`);
+        setStatusMessage('Đã xóa tài khoản nhân viên.');
       } else if (modalMode === 'reset-pass') {
         await usersApi.resetPassword(selectedItem.id);
         setStatusMessage(`Đã đặt lại mật khẩu cho ${selectedItem.email} thành EventHub@2026.`);
@@ -412,10 +387,13 @@ export default function Setting() {
 
   return (
     <div className="flex flex-col w-full bg-slate-50 text-slate-800 font-sans pb-10">
+      {/* Header Tabs */}
       <div className="p-3.5 sm:p-4 lg:p-6 bg-white border-b border-slate-200 shrink-0 space-y-3 sm:space-y-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Cài đặt hệ thống</h1>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Quản trị nguồn cào dữ liệu, tài khoản và thông báo Telegram</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+            Quản trị nguồn cào dữ liệu, tài khoản, phòng ban và thông báo Telegram
+          </p>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 border-b border-slate-100 pb-1 text-xs font-semibold overflow-x-auto">
@@ -424,7 +402,7 @@ export default function Setting() {
             { id: 'users', label: 'Tài khoản nhân viên', icon: Users },
             { id: 'telegram', label: 'Thông báo Telegram', icon: Send },
             { id: 'keywords', label: 'Từ khóa phân loại', icon: Sliders },
-            { id: 'departments', label: 'Phân loại phòng ban', icon: Building2 },
+            { id: 'departments', label: 'Phòng ban', icon: Building2 },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -445,6 +423,7 @@ export default function Setting() {
         </div>
       </div>
 
+      {/* Main Tab Content */}
       <div className="p-3 sm:p-4 lg:p-6 space-y-4">
         {statusMessage && (
           <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium rounded-xl flex items-center justify-between transition">
@@ -456,772 +435,123 @@ export default function Setting() {
         )}
 
         {activeTab === 'crawler' && (
-          <div className="space-y-3 w-full">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-700">Danh sách Crawler ({crawlers.length})</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleRunAllCrawlers}
-                  disabled={crawlLoading}
-                  className="h-8 px-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
-                  title="Cào ngay toàn bộ các trang đối thủ"
-                >
-                  {crawlLoading ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin text-blue-600" />
-                      <span>Đang cào tất cả...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={12} className="text-blue-600 fill-blue-600" />
-                      <span>Cào tất cả</span>
-                    </>
-                  )}
-                </button>
-                <button 
-                  onClick={() => handleOpenModal('add-crawler')}
-                  className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                >
-                  <Plus size={14} />
-                  <span className="hidden xs:inline">Thêm đối thủ</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {crawlers.map((c) => (
-                <div key={c.id} className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-2xs space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <img
-                        src={getBrandLogo(c.id, c.name, c.logo)}
-                        alt={c.name}
-                        onError={(e) => { e.currentTarget.src = getBrandLogo(c.id, c.name); }}
-                        className="w-8 h-8 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-900 truncate">{c.name}</div>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
-                          <Clock size={10} className="shrink-0" />
-                          <span className="truncate">Quét {c.interval}/lần • {c.lastRun}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                      <button
-                        onClick={() => openCrawlPopup(c)}
-                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-medium flex items-center gap-1 transition cursor-pointer border border-blue-200"
-                      >
-                        <Play size={11} /> Cào ngay
-                      </button>
-                      <button 
-                        onClick={() => handleOpenModal('edit-crawler', c)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md transition cursor-pointer"
-                        title="Sửa"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button 
-                        onClick={() => handleOpenModal('delete-crawler', c)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer"
-                        title="Xóa"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                      <input
-                        type="checkbox"
-                        checked={c.enabled}
-                        onChange={() => handleToggleCrawler(c.id)}
-                        className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] space-y-1">
-                    <div className="font-semibold text-slate-600">Link theo dõi:</div>
-                    {c.targetUrls.map((url, idx) => (
-                      <div key={idx} className="w-full p-2 bg-slate-50 rounded border border-slate-100 text-slate-600 font-mono text-[10px] sm:text-[11px] break-all">
-                        {url}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CrawlerTab
+            crawlers={crawlers}
+            crawlLoading={crawlLoading}
+            onRunAll={handleRunAllCrawlers}
+            onAddCrawler={() => handleOpenModal('add-crawler')}
+            onOpenCrawlPopup={openCrawlPopup}
+            onEditCrawler={(c) => handleOpenModal('edit-crawler', c)}
+            onDeleteCrawler={(c) => handleOpenModal('delete-crawler', c)}
+            onToggleCrawler={handleToggleCrawler}
+          />
         )}
 
         {activeTab === 'users' && (
-          <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="p-3 sm:p-3.5 border-b border-slate-100 flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-700">Danh sách tài khoản ({users.length})</span>
-              <button 
-                onClick={() => handleOpenModal('add-user')}
-                className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
-              >
-                <Plus size={14} />
-                <span className="hidden xs:inline">Thêm nhân viên</span>
-              </button>
-            </div>
-            <div className="divide-y divide-slate-100 text-xs">
-              {users.map((u) => (
-                <div key={u.id} className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50 transition">
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">{u.name}</div>
-                    <div className="text-[10px] sm:text-[11px] text-slate-400 truncate mt-0.5">{u.email} • {u.department}</div>
-                  </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${u.role === 'Admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-slate-100 text-slate-600'}`}>
-                      {u.role}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => handleOpenModal('reset-pass', u)} title="Reset mật khẩu" className="p-1.5 text-slate-400 hover:text-orange-600 rounded cursor-pointer">
-                        <KeyRound size={14} />
-                      </button>
-                      <button onClick={() => handleOpenModal('edit-user', u)} title="Sửa" className="p-1.5 text-slate-400 hover:text-blue-600 rounded cursor-pointer">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={() => handleOpenModal('delete-user', u)} title="Xóa" className="p-1.5 text-slate-400 hover:text-rose-600 rounded cursor-pointer">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <UsersTab
+            users={users}
+            onAddUser={() => handleOpenModal('add-user')}
+            onEditUser={(u) => handleOpenModal('edit-user', u)}
+            onDeleteUser={(u) => handleOpenModal('delete-user', u)}
+            onResetPassword={(u) => handleOpenModal('reset-pass', u)}
+          />
         )}
 
         {activeTab === 'telegram' && (
-          <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
-            <h2 className="text-sm font-bold text-slate-900">Cấu hình Bot Telegram</h2>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Bot Token:</label>
-                <input
-                  type="text"
-                  value={telegramConfig.botToken}
-                  onChange={(e) => setTelegramConfig({ ...telegramConfig, botToken: e.target.value })}
-                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 font-mono text-[11px] sm:text-xs outline-none focus:border-blue-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Chat ID / Group ID:</label>
-                <input
-                  type="text"
-                  value={telegramConfig.chatId}
-                  onChange={(e) => setTelegramConfig({ ...telegramConfig, chatId: e.target.value })}
-                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 font-mono text-[11px] sm:text-xs outline-none focus:border-blue-500"
-                />
-              </div>
-              <div className="pt-2 space-y-2 border-t border-slate-100">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={telegramConfig.notifyImmediately} onChange={(e) => setTelegramConfig({ ...telegramConfig, notifyImmediately: e.target.checked })} className="w-4 h-4 text-blue-600 rounded cursor-pointer shrink-0" />
-                  <span>Gửi tin nhắn tức thì khi cào được sự kiện mới</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={telegramConfig.includeImage} onChange={(e) => setTelegramConfig({ ...telegramConfig, includeImage: e.target.checked })} className="w-4 h-4 text-blue-600 rounded cursor-pointer shrink-0" />
-                  <span>Đính kèm ảnh banner vào tin nhắn</span>
-                </label>
-              </div>
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  onClick={handleTestTelegramConfig}
-                  disabled={settingsSaving}
-                  className="h-8.5 px-3.5 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold cursor-pointer disabled:opacity-50"
-                >
-                  Test thử
-                </button>
-                <button
-                  onClick={handleSaveTelegramConfig}
-                  disabled={settingsSaving}
-                  className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-2xs disabled:opacity-50"
-                >
-                  {settingsSaving ? 'Đang lưu...' : 'Lưu'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <TelegramTab
+            telegramConfig={telegramConfig}
+            setTelegramConfig={setTelegramConfig}
+            onTest={handleTestTelegramConfig}
+            onSave={handleSaveTelegramConfig}
+            settingsSaving={settingsSaving}
+          />
         )}
 
         {activeTab === 'keywords' && (
-          <div className="space-y-3 w-full">
-            <h2 className="text-xs font-bold text-slate-700">Luật phân loại tự động</h2>
-            <div className="space-y-2.5 w-full">
-              {keywordRules.map((rule, idx) => (
-                <div key={idx} className="w-full bg-white rounded-xl border border-slate-200 p-3 sm:p-3.5 shadow-2xs space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800">{rule.label} ({rule.type})</span>
-                    <button 
-                      onClick={() => handleOpenModal('edit-keyword', { ...rule, idx })}
-                      className="text-blue-600 hover:underline font-semibold cursor-pointer text-[11px] shrink-0"
-                    >
-                      Sửa từ khóa
-                    </button>
-                  </div>
-                  <div className="w-full p-2 sm:p-2.5 rounded bg-slate-50 border border-slate-100 font-mono text-[10px] sm:text-[11px] text-slate-600 break-words">
-                    {rule.keywords}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <KeywordsTab
+            keywordRules={keywordRules}
+            onEditKeyword={(rule, idx) => handleOpenModal('edit-keyword', { ...rule, idx })}
+          />
         )}
 
         {activeTab === 'departments' && (
-          <div className="space-y-4 w-full">
-            {/* 1. Quản lý danh sách phòng ban */}
-            <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">Danh sách Phòng ban ({departmentsList.length})</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Quản lý các phòng ban trong công ty, phân quyền và hiển thị trên menu</p>
-                </div>
-                <button
-                  onClick={() => handleOpenModal('add-department')}
-                  className="h-8.5 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs self-start sm:self-auto"
-                >
-                  <Plus size={14} />
-                  <span>Thêm phòng ban</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {departmentsList.map((dept) => (
-                  <div key={dept.code} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex flex-col justify-between gap-2.5 transition">
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-slate-900 text-xs sm:text-sm">{dept.name}</span>
-                        <span className="font-mono text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-semibold">
-                          {dept.code}
-                        </span>
-                      </div>
-                      {dept.desc && (
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{dept.desc}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200/60">
-                      <button
-                        onClick={() => handleOpenModal('edit-department', dept)}
-                        className="h-7 px-2.5 rounded text-blue-600 hover:bg-blue-50 font-semibold flex items-center gap-1 transition cursor-pointer text-[11px]"
-                      >
-                        <Edit2 size={12} />
-                        <span>Sửa</span>
-                      </button>
-                      <button
-                        onClick={() => handleOpenModal('delete-department', dept)}
-                        className="h-7 px-2.5 rounded text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-1 transition cursor-pointer text-[11px]"
-                      >
-                        <Trash2 size={12} />
-                        <span>Xóa</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. Phân loại nhãn sự kiện */}
-            <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">Phân loại nhãn sự kiện theo Phòng ban</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Tích chọn để chia luồng sự kiện tương ứng cho từng phòng ban</p>
-                </div>
-                <button
-                  onClick={handleSaveDepartmentRules}
-                  disabled={settingsSaving}
-                  className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-2xs disabled:opacity-50 shrink-0 self-start sm:self-auto"
-                >
-                  {settingsSaving ? 'Đang lưu...' : 'Lưu phân loại'}
-                </button>
-              </div>
-
-              <div className="divide-y divide-slate-100">
-                {departmentRules.map((rule) => {
-                  return (
-                    <div key={rule.type} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/50 px-2 rounded-lg transition">
-                      <div className="min-w-[180px]">
-                        <span className="font-bold text-slate-800 text-xs sm:text-sm">{rule.label}</span>
-                        <span className="ml-2 font-mono text-[10px] text-slate-400">({rule.type})</span>
-                      </div>
-                      <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
-                        {departmentsList.map((dept) => {
-                          const isChecked = (rule.departments || []).includes(dept.code);
-                          return (
-                            <label key={dept.code} className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium select-none text-xs">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => handleToggleDepartment(rule.type, dept.code)}
-                                className="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600"
-                              />
-                              <span>{dept.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          <DepartmentsTab
+            departmentsList={departmentsList}
+            departmentRules={departmentRules}
+            settingsSaving={settingsSaving}
+            onAddDepartment={() => handleOpenModal('add-department')}
+            onEditDepartment={(dept) => handleOpenModal('edit-department', dept)}
+            onDeleteDepartment={(dept) => handleOpenModal('delete-department', dept)}
+            onToggleDepartment={handleToggleDepartment}
+            onSaveDepartmentRules={handleSaveDepartmentRules}
+          />
         )}
       </div>
 
-      {crawlTarget && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-blue-950/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-[46rem] max-h-[90vh] overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl flex flex-col my-auto">
-            
-            <div className="relative flex items-center justify-center px-4 py-3 bg-white border-b border-slate-100 shrink-0">
-              <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center p-1 shadow-xs border border-slate-200">
-                <img src={crawlTarget.logo} alt={crawlTarget.name} className="h-full w-full object-contain" />
-              </div>
-              <button 
-                onClick={closePopup} 
-                className="absolute right-3 shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
+      {/* Popups & Modals */}
+      <CrawlPreviewModal
+        crawlTarget={crawlTarget}
+        crawlLoading={crawlLoading}
+        crawlResult={crawlResult}
+        onClose={closeCrawlPopup}
+        onRunCrawl={runCrawl}
+      />
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {!crawlResult ? (
-                <>
-                  <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
-                    <div className="text-sm font-semibold text-blue-900">Bắt đầu cào dữ liệu?</div>
-                    <div className="mt-1 text-[11px] leading-5 text-blue-700/80">
-                      Hệ thống sẽ quét {crawlTarget.targetUrls.length} URL và cập nhật sự kiện mới.
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {crawlTarget.targetUrls.map((url) => (
-                        <div key={url} className="max-w-full rounded-full border border-blue-200 bg-white px-3 py-1 text-[10px] text-blue-800 truncate">
-                          {url}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+      <CrawlerModal
+        isOpen={modalMode === 'add-crawler' || modalMode === 'edit-crawler'}
+        mode={modalMode === 'add-crawler' ? 'add' : 'edit'}
+        formData={formData}
+        setFormData={setFormData}
+        onClose={handleCloseModal}
+        onSave={handleSaveModal}
+        saving={settingsSaving}
+      />
 
-                  {crawlLoading ? (
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-                        <Loader2 size={15} className="animate-spin" />
-                        <span>Đang cào dữ liệu từ nguồn...</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-blue-100">
-                        <div className="h-full w-2/3 rounded-full bg-blue-600 animate-pulse" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-end gap-2 pt-2">
-                      <button onClick={closePopup} className="h-9 px-3.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
-                        Hủy
-                      </button>
-                      <button onClick={runCrawl} className="h-9 px-4 rounded-lg bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 inline-flex items-center gap-1.5 cursor-pointer shadow-xs">
-                        <ArrowRight size={13} />
-                        Bắt đầu cào
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="space-y-5 p-2 max-h-[58vh] overflow-y-auto pr-1">
-                    {crawlResult.items.map((event) => {
-                      const style = CATEGORY_STYLES[event.type] || CATEGORY_STYLES.release;
-                      const formattedDate = formatEventDate(event.date);
-                      return (
-                        <div key={event.id} className="relative pl-4 sm:pl-5 border-l-2 border-blue-200">
-                          <span className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ring-4 ring-white ${style.dot}`} />
+      <UserModal
+        isOpen={modalMode === 'add-user' || modalMode === 'edit-user' || modalMode === 'reset-pass'}
+        mode={modalMode === 'add-user' ? 'add' : modalMode === 'edit-user' ? 'edit' : 'reset-pass'}
+        selectedUser={selectedItem}
+        departmentsList={departmentsList}
+        formData={formData}
+        setFormData={setFormData}
+        onClose={handleCloseModal}
+        onSave={handleSaveModal}
+        saving={settingsSaving}
+      />
 
-                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-500 font-medium">
-                              <Clock size={12} className="text-blue-500" />
-                              <span>{formattedDate} {event.time ? `• ${event.time}` : ''}</span>
-                            </span>
-                            <span className={`px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold leading-none ${style.pill}`}>
-                              {style.label}
-                            </span>
-                          </div>
+      <DepartmentModal
+        isOpen={modalMode === 'add-department' || modalMode === 'edit-department'}
+        mode={modalMode === 'add-department' ? 'add' : 'edit'}
+        formData={formData}
+        setFormData={setFormData}
+        onClose={handleCloseModal}
+        onSave={handleSaveModal}
+        saving={settingsSaving}
+      />
 
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="text-xs font-bold text-slate-900 leading-snug flex-1">
-                              {event.fullTitle || event.title}
-                            </div>
-                            {event.url && (
-                              <a
-                                href={event.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 shrink-0 transition"
-                              >
-                                <span>Chi tiết</span>
-                                <ExternalLink size={10} />
-                              </a>
-                            )}
-                          </div>
+      <KeywordModal
+        isOpen={modalMode === 'edit-keyword'}
+        formData={formData}
+        setFormData={setFormData}
+        onClose={handleCloseModal}
+        onSave={handleSaveModal}
+        saving={settingsSaving}
+      />
 
-                          {event.desc && (
-                            <div className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-                              {event.desc}
-                            </div>
-                          )}
-
-                          {event.image && (
-                            <div
-                              onClick={() => event.url && window.open(event.url, '_blank')}
-                              title="Bấm để xem bài viết gốc"
-                              className="mt-2.5 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-2xs cursor-pointer hover:border-blue-400 hover:shadow-xs transition group"
-                            >
-                              <img
-                                src={event.image}
-                                alt={event.title}
-                                className="w-full max-h-48 object-contain rounded-lg transition duration-200 group-hover:scale-[1.01]"
-                                loading="lazy"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex justify-end pt-2 border-t border-slate-100">
-                    <button onClick={closePopup} className="h-9 px-4 rounded-lg bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-xs">
-                      Đóng
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {modalMode && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-blue-950/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-lg rounded-2xl border border-blue-100 bg-white shadow-2xl flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
-            
-            <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
-              <div className="text-xs font-bold uppercase tracking-wider">
-                {modalMode === 'add-crawler' && 'Thêm đối thủ mới'}
-                {modalMode === 'edit-crawler' && 'Chỉnh sửa Crawler'}
-                {modalMode === 'delete-crawler' && 'Xác nhận xóa đối thủ'}
-                {modalMode === 'add-user' && 'Thêm nhân viên mới'}
-                {modalMode === 'edit-user' && 'Chỉnh sửa tài khoản'}
-                {modalMode === 'delete-user' && 'Xác nhận xóa nhân viên'}
-                {modalMode === 'reset-pass' && 'Reset mật khẩu'}
-                {modalMode === 'edit-keyword' && 'Sửa từ khóa phân loại'}
-                {modalMode === 'add-department' && 'Thêm phòng ban mới'}
-                {modalMode === 'edit-department' && 'Chỉnh sửa phòng ban'}
-                {modalMode === 'delete-department' && 'Xác nhận xóa phòng ban'}
-              </div>
-              <button onClick={handleCloseModal} className="p-1 text-white/80 hover:text-white rounded-lg cursor-pointer">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3.5 text-xs">
-              {(modalMode === 'add-department' || modalMode === 'edit-department') && (
-                <>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Tên phòng ban: <span className="text-rose-500">*</span></label>
-                    <input
-                      type="text"
-                      value={formData.name || ''}
-                      onChange={(e) => {
-                        const name = e.target.value;
-                        const code = modalMode === 'add-department' && !formData.codeEdited
-                          ? name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
-                          : formData.code;
-                        setFormData({ ...formData, name, code });
-                      }}
-                      placeholder="VD: Chăm sóc khách hàng, Vận hành, Kỹ thuật..."
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Mã định danh (Code / Slug): <span className="text-rose-500">*</span></label>
-                    <input
-                      type="text"
-                      disabled={modalMode === 'edit-department'}
-                      value={formData.code || ''}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'), codeEdited: true })}
-                      placeholder="VD: cskh, van_hanh, ky_thuat"
-                      className={`w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none font-mono text-[11px] ${
-                        modalMode === 'edit-department' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'focus:border-blue-500'
-                      }`}
-                    />
-                    {modalMode === 'add-department' && (
-                      <p className="text-[10px] text-slate-400">Dùng làm mã hệ thống và phân quyền nhân viên</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Mô tả / Chức năng:</label>
-                    <textarea
-                      rows={2}
-                      value={formData.desc || ''}
-                      onChange={(e) => setFormData({ ...formData, desc: e.target.value })}
-                      placeholder="VD: Quản lý khách hàng, tiếp nhận thông tin..."
-                      className="w-full rounded-lg border border-slate-200 p-2 outline-none text-xs focus:border-blue-500"
-                    />
-                  </div>
-                </>
-              )}
-
-              {modalMode === 'delete-department' && (
-                <div className="flex items-start gap-3 py-2 text-slate-600">
-                  <div className="p-2 rounded-xl bg-rose-50 text-rose-600 shrink-0">
-                    <AlertTriangle size={20} />
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900">Bạn có chắc chắn muốn xóa phòng ban này?</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Phòng ban <span className="font-semibold text-slate-800">{selectedItem?.name} ({selectedItem?.code})</span> sẽ bị xóa khỏi menu và bộ lọc phân loại.
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {(modalMode === 'add-crawler' || modalMode === 'edit-crawler') && (
-                <>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Tên đối thủ:</label>
-                    <input
-                      type="text"
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="VD: CellphoneS, FPT Shop..."
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-semibold text-slate-700">Logo đối thủ:</label>
-                    <div className="flex items-center gap-3">
-                      {formData.logo ? (
-                        <div className="relative group shrink-0">
-                          <img
-                            src={formData.logo}
-                            alt="Logo preview"
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = '/img/mtm.jpg';
-                            }}
-                            className="w-10 h-10 rounded-lg object-contain border border-slate-200 p-1 bg-white shadow-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, logo: '' })}
-                            className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-0.5 shadow-md hover:bg-rose-600 transition cursor-pointer"
-                            title="Xóa logo"
-                          >
-                            <X size={11} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
-                          <ImageIcon size={18} />
-                        </div>
-                      )}
-
-                      <label className="flex-1 cursor-pointer">
-                        <div className="h-8.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100/80 text-blue-600 font-semibold px-3 flex items-center justify-center gap-2 transition text-xs select-none shadow-2xs">
-                          <Upload size={14} />
-                          <span>{formData.logo ? 'Thay đổi file logo (Browse...)' : 'Tải file logo từ máy (Browse...)'}</span>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*,.htm,.html,*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = (evt) => {
-                              if (evt.target?.result) {
-                                setFormData((prev) => ({ ...prev, logo: evt.target.result }));
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    <input
-                      type="text"
-                      value={formData.logo || ''}
-                      onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
-                      placeholder="Hoặc dán link URL logo (.png, .jpg, .htm, .html...)"
-                      className="w-full h-8 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px] mt-1"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="font-semibold text-slate-700">Link RSS / Website theo dõi:</label>
-                      <button
-                        type="button"
-                        onClick={handleAddUrlField}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md transition cursor-pointer"
-                      >
-                        <Plus size={13} /> Thêm đường dẫn
-                      </button>
-                    </div>
-
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                      {(formData.targetUrls || ['']).map((url, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={url}
-                            onChange={(e) => handleUrlChange(index, e.target.value)}
-                            placeholder="https://..."
-                            className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
-                          />
-                          {formData.targetUrls.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveUrlField(index)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer shrink-0"
-                              title="Xóa đường dẫn này"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {(modalMode === 'delete-crawler' || modalMode === 'delete-user') && (
-                <div className="flex items-start gap-3 py-2 text-slate-600">
-                  <div className="p-2 rounded-xl bg-rose-50 text-rose-600 shrink-0">
-                    <AlertTriangle size={20} />
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900">Bạn có chắc chắn muốn xóa?</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">Hành động này sẽ xóa vĩnh viễn <span className="font-semibold text-slate-800">{selectedItem?.name}</span> khỏi hệ thống.</div>
-                  </div>
-                </div>
-              )}
-
-              {(modalMode === 'add-user' || modalMode === 'edit-user') && (
-                <>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Họ và tên:</label>
-                    <input
-                      type="text"
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Nguyễn Văn A"
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Email:</label>
-                    <input
-                      type="email"
-                      value={formData.email || ''}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="email@company.com"
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Mật khẩu:</label>
-                    <input
-                      type="text"
-                      value={formData.password || ''}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="Nhập mật khẩu tài khoản"
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="font-semibold text-slate-700">Phòng ban:</label>
-                      <select
-                        value={formData.department || departmentsList[0]?.code || 'mkt'}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                        className="w-full h-8.5 rounded-lg border border-slate-200 px-2 outline-none bg-white"
-                      >
-                        {departmentsList.map((dept) => (
-                          <option key={dept.code} value={dept.code}>
-                            {dept.name} ({dept.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="font-semibold text-slate-700">Quyền hạn:</label>
-                      <select
-                        value={formData.role || 'Staff'}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full h-8.5 rounded-lg border border-slate-200 px-2 outline-none bg-white"
-                      >
-                        <option value="Staff">Staff</option>
-                        <option value="Admin">Admin</option>
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {modalMode === 'reset-pass' && (
-                <div className="space-y-2 py-1">
-                  <div className="text-slate-600">ĐẶT LẠI MẬT KHẨU CHO: <span className="font-bold text-slate-900">{selectedItem?.name}</span></div>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-slate-700">Mật khẩu mới tự động:</label>
-                    <input
-                      type="text"
-                      defaultValue="EventHub@2026"
-                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 font-mono text-slate-700 bg-slate-50"
-                      readOnly
-                    />
-                  </div>
-                </div>
-              )}
-
-              {modalMode === 'edit-keyword' && (
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700">Danh sách từ khóa (cách nhau bởi dấu phẩy):</label>
-                  <textarea
-                    rows={4}
-                    value={formData.keywords || ''}
-                    onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 p-2.5 outline-none font-mono text-[11px] leading-relaxed focus:border-blue-500"
-                  />
-                </div>
-              )}
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                <button onClick={handleCloseModal} className="h-8.5 px-3.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold cursor-pointer">
-                  Hủy
-                </button>
-                <button 
-                  onClick={modalMode === 'reset-pass' ? handleCloseModal : handleSaveData} 
-                  className={`h-8.5 px-4 rounded-lg text-white font-semibold cursor-pointer shadow-xs ${
-                    modalMode?.includes('delete') ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  {modalMode === 'reset-pass' ? 'Xác nhận' : modalMode?.includes('delete') ? 'Xóa vĩnh viễn' : 'Lưu thay đổi'}
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <ConfirmDeleteModal
+        isOpen={modalMode === 'delete-crawler' || modalMode === 'delete-user' || modalMode === 'delete-department'}
+        title={
+          modalMode === 'delete-crawler'
+            ? 'Xác nhận xóa đối thủ'
+            : modalMode === 'delete-user'
+            ? 'Xác nhận xóa nhân viên'
+            : 'Xác nhận xóa phòng ban'
+        }
+        itemName={selectedItem?.name}
+        onClose={handleCloseModal}
+        onConfirm={handleSaveModal}
+        saving={settingsSaving}
+      />
     </div>
   );
 }
