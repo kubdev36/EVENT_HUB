@@ -32,7 +32,21 @@ export class CrawlerService {
 
   async crawlAllTargets() {
     const targets = (await this.getCrawlerTargets()).filter((target) => target.enabled !== false);
-    return Promise.all(targets.map((target) => this.crawlTargetSafely(target)));
+    const results = [];
+    for (const target of targets) {
+      const res = await this.crawlTargetSafely(target);
+      results.push(res);
+      // Gentle delay between targets (2-3s) to prevent IP rate-limiting & WAF flags
+      await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 1000));
+    }
+    return results;
+  }
+
+  async getRecentRuns(limit = 50) {
+    return this.crawlerRunRepository.find({
+      order: { startedAt: 'DESC' },
+      take: limit,
+    });
   }
 
   async crawlSourceById(id: string) {
@@ -252,21 +266,23 @@ export class CrawlerService {
     const seenUrls = new Set<string>();
 
     for (const baseUrl of target.targetUrls || []) {
+      const isFptShop = baseUrl.includes('fptshop.com.vn');
+      const isSforum = baseUrl.includes('cellphones.com.vn') || baseUrl.includes('sforum.vn');
+      const isCustomAjaxSite = !!(target.ajaxEndpoint || target.paginationType === 'ajax' || target.paginationType === 'none');
+
       const urlsToCrawl = [baseUrl];
 
-      // Auto add pagination pages for standard news sites (excluding custom AJAX stores and Sforum/CellphoneS which uses feeds)
-      const isCustomAjaxSite = !!(target.ajaxEndpoint || target.paginationType === 'ajax' || target.paginationType === 'none');
-      const isSforum = baseUrl.includes('cellphones.com.vn') || baseUrl.includes('sforum.vn');
-      if ((baseUrl.includes('category') || baseUrl.includes('tin-tuc') || baseUrl.includes('khuyen-mai')) && !isCustomAjaxSite && !isSforum) {
-        for (let p = 2; p <= 15; p++) {
+      // Auto add gentle pagination (max 2 pages) for standard sites, skipping FPT Shop & Sforum which have full RSS/APIs
+      if ((baseUrl.includes('category') || baseUrl.includes('tin-tuc') || baseUrl.includes('khuyen-mai')) && !isCustomAjaxSite && !isSforum && !isFptShop) {
+        for (let p = 2; p <= 3; p++) {
           const pPage = baseUrl.includes('?') ? `${baseUrl}&page=${p}` : (baseUrl.endsWith('/') ? `${baseUrl}page/${p}/` : `${baseUrl}/page/${p}/`);
           const pTrang = baseUrl.endsWith('/') ? `${baseUrl}trang-${p}` : `${baseUrl}/trang-${p}`;
           urlsToCrawl.push(pPage, pTrang);
         }
       }
 
-      // Parallel batch fetching for static web pages (concurrency: 5)
-      const batchSize = 5;
+      // Safe batch fetching for static web pages (concurrency: 2 with delay)
+      const batchSize = 2;
       for (let i = 0; i < urlsToCrawl.length; i += batchSize) {
         const batch = urlsToCrawl.slice(i, i + batchSize);
         await Promise.all(
@@ -286,10 +302,13 @@ export class CrawlerService {
             }
           }),
         );
+        if (i + batchSize < urlsToCrawl.length) {
+          await new Promise((r) => setTimeout(r, 1000 + Math.random() * 500));
+        }
       }
 
-      // Fetch RSS feed ONCE per baseUrl if available
-      if (!baseUrl.includes('/feed')) {
+      // Fetch RSS feed ONCE per baseUrl if available (skip FPTShop since it has dedicated feeds below)
+      if (!baseUrl.includes('/feed') && !isFptShop) {
         const feedUrl = baseUrl.endsWith('/') ? `${baseUrl}feed/` : `${baseUrl}/feed/`;
         const feedResp = await this.fetchHtml(feedUrl);
         if (feedResp && (feedResp.html.includes('<rss') || feedResp.html.includes('<feed') || feedResp.html.includes('<?xml'))) {
@@ -313,8 +332,8 @@ export class CrawlerService {
         };
 
         for (const catId of categoryIds) {
-          // Fetch up to 5 pages (20 per page = 100 articles per category)
-          for (let page = 1; page <= 5; page++) {
+          // Fetch up to 3 pages (20 per page = 60 latest articles)
+          for (let page = 1; page <= 3; page++) {
             try {
               const gqlQuery = `
                 query Posts {
@@ -359,7 +378,7 @@ export class CrawlerService {
 
               // Stop paginating if we've reached the last page
               if (meta && meta.current_page >= meta.total_pages) break;
-              await new Promise((r) => setTimeout(r, 200));
+              await new Promise((r) => setTimeout(r, 400));
             } catch (err: any) {
               console.error(`[CellphoneS GQL] Error fetching category ${catId} page ${page}: ${err?.message || err}`);
               break;
@@ -369,25 +388,15 @@ export class CrawlerService {
       }
 
 
-      // Fetch Hoang Ha Mobile RSS feed & category feeds
+      // Fetch Hoang Ha Mobile RSS feed & category feeds (gentle 2 pages)
       if (baseUrl.includes('hoanghamobile.com')) {
-        const hhFeeds: string[] = [];
-        // Khuyến mãi category (up to 15 pages = ~150 items)
-        for (let p = 1; p <= 15; p++) {
-          hhFeeds.push(p === 1 ? 'https://hoanghamobile.com/tin-tuc/category/khuyen-mai/feed/' : `https://hoanghamobile.com/tin-tuc/category/khuyen-mai/feed/?paged=${p}`);
-        }
-        // Tin hot category (up to 8 pages = ~80 items)
-        for (let p = 1; p <= 8; p++) {
-          hhFeeds.push(p === 1 ? 'https://hoanghamobile.com/tin-tuc/category/tin-cong-nghe/tin-hot/feed/' : `https://hoanghamobile.com/tin-tuc/category/tin-cong-nghe/tin-hot/feed/?paged=${p}`);
-        }
-        // Đánh giá category (up to 5 pages)
-        for (let p = 1; p <= 5; p++) {
-          hhFeeds.push(p === 1 ? 'https://hoanghamobile.com/tin-tuc/category/danh-gia/feed/' : `https://hoanghamobile.com/tin-tuc/category/danh-gia/feed/?paged=${p}`);
-        }
-        // General feed (up to 10 pages = ~100 items)
-        for (let p = 1; p <= 10; p++) {
-          hhFeeds.push(p === 1 ? 'https://hoanghamobile.com/tin-tuc/feed/' : `https://hoanghamobile.com/tin-tuc/feed/?paged=${p}`);
-        }
+        const hhFeeds: string[] = [
+          'https://hoanghamobile.com/tin-tuc/category/khuyen-mai/feed/',
+          'https://hoanghamobile.com/tin-tuc/category/khuyen-mai/feed/?paged=2',
+          'https://hoanghamobile.com/tin-tuc/category/tin-cong-nghe/tin-hot/feed/',
+          'https://hoanghamobile.com/tin-tuc/category/danh-gia/feed/',
+          'https://hoanghamobile.com/tin-tuc/feed/',
+        ];
 
         for (const feedUrl of hhFeeds) {
           const feedResp = await this.fetchHtml(feedUrl);
@@ -397,18 +406,16 @@ export class CrawlerService {
               items.push(...this.extractFromRss($rss, feedResp.url));
             }
           }
-           await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, 400));
         }
       }
 
-      // Fetch FPT Shop RSS feeds & Google News sitemap
+      // Fetch FPT Shop official RSS feeds & Google News sitemap (safe & efficient)
       if (baseUrl.includes('fptshop.com.vn')) {
         const fptFeeds = [
           'https://fptshop.com.vn/news/rss/tin-moi.rss',
-          'https://fptshop.com.vn/news/rss/danh-gia.rss',
-          'https://fptshop.com.vn/news/rss/dien-may.rss',
           'https://fptshop.com.vn/news/rss/news-new.rss',       // 100 latest articles
-          'https://fptshop.com.vn/news/google-news.xml',         // 362 articles with dates
+          'https://fptshop.com.vn/news/google-news.xml',         // ~300 articles with dates
         ];
         for (const feedUrl of fptFeeds) {
           const feedResp = await this.fetchHtml(feedUrl);
@@ -435,7 +442,7 @@ export class CrawlerService {
               }
             }
           }
-          await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 600));
         }
       }
     }
@@ -713,11 +720,22 @@ export class CrawlerService {
             try {
               await resp.body?.cancel();
             } catch {}
+            if (resp.status === 403 || resp.status === 429) {
+              console.warn(`[Crawler] Received ${resp.status} on ${attemptUrl} (Rate limited or protected). Skipping.`);
+              return null;
+            }
             continue;
           }
           const html = await resp.text();
-          if (html.includes('BytePlus') && html.includes('Security Check')) {
-            // WAF challenge intercepted, skip treating as valid content
+          if (
+            html.includes('Sorry, you have been blocked') ||
+            html.includes('Cloudflare Ray ID') ||
+            html.includes('Attention Required! | Cloudflare') ||
+            html.includes('Just a moment...') ||
+            (html.includes('BytePlus') && html.includes('Security Check'))
+          ) {
+            // WAF challenge/block intercepted, skip treating as valid content to protect crawler
+            console.warn(`[Crawler] Target ${attemptUrl} triggered WAF / Cloudflare block. Skipping gracefully.`);
             return null;
           }
           return { url: resp.url || attemptUrl, html };

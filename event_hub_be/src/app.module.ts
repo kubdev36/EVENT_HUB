@@ -25,7 +25,9 @@ import { UsersModule } from './users/users.module.js';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize:
+          configService.get<string>('DB_SYNC') === 'true' ||
+          configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
     AuthModule,

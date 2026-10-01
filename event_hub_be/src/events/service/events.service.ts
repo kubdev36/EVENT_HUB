@@ -2,10 +2,10 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
-import { CreateEventDto } from './dto/create-event.dto.js';
-import { Event } from './entity/event.entity.js';
-import { Setting } from '../settings/entity/setting.entity.js';
-import { Role } from '../auth/enums/role.enum.js';
+import { CreateEventDto } from '../dto/create-event.dto.js';
+import { Event } from '../entity/event.entity.js';
+import { Setting } from '../../settings/entity/setting.entity.js';
+import { Role } from '../../auth/enums/role.enum.js';
 
 type RequestUser = {
   id: string;

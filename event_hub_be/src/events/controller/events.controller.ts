@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
-import { RolesGuard } from '../auth/guards/roles.guard.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
-import { Role } from '../auth/enums/role.enum.js';
-import { CreateEventDto } from './dto/create-event.dto.js';
-import { EventsService } from './events.service.js';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../../auth/guards/roles.guard.js';
+import { Roles } from '../../auth/decorators/roles.decorator.js';
+import { Role } from '../../auth/enums/role.enum.js';
+import { CreateEventDto } from '../dto/create-event.dto.js';
+import { EventsService } from '../service/events.service.js';
 
 @ApiTags('events')
 @ApiBearerAuth()
