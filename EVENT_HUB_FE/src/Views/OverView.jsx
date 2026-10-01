@@ -209,7 +209,7 @@ export default function Overview() {
                   tickLine={false}
                   tick={({ x, y, payload }) => {
                     const brand = brandStats.find((b) => b.name === payload.value);
-                    const logoSrc = getBrandLogo(brand?.id, brand?.name, brand?.logo);
+                    const logoSrc = brand?.logo || '/img/mtm.jpg';
                     return (
                       <g transform={`translate(${x},${y})`}>
                         {logoSrc && (
@@ -274,9 +274,12 @@ export default function Overview() {
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 border border-slate-200 rounded-lg flex items-center justify-center bg-white p-0.5 shrink-0">
                     <img
-                      src={getBrandLogo(b.id, b.name, b.logo)}
+                      src={b.logo || '/img/mtm.jpg'}
                       alt={b.name}
-                      onError={(e) => { e.currentTarget.src = getBrandLogo(b.id, b.name); }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/img/mtm.jpg';
+                      }}
                       className="w-full h-full object-contain rounded"
                     />
                   </div>
