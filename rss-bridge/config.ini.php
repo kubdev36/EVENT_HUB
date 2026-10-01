@@ -12,9 +12,9 @@ enabled_bridges[] = "YoutubeBridge"
 enabled_bridges[] = "TikTokBridge"
 
 [cache]
-; Cache configuration (file cache in seconds, default 1800s = 30 minutes)
+; Cache configuration (type: file, custom_timeout allows custom cache durations)
 type = "file"
-custom_timeout = 1800
+custom_timeout = true
 
 [FacebookBridge]
 ; Facebook Cookie authentication to bypass login wall
