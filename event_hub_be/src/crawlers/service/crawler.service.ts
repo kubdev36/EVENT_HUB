@@ -7,7 +7,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { Repository } from 'typeorm';
 import { ClassifierService } from '../../classifier/classifier.service.js';
-import { CrawlerRun } from '../../crawler-runs/entity/crawler-run.entity.js';
+import { CrawlerRun } from '../entity/crawler-run.entity.js';
 import { Event } from '../../events/entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
 import { TelegramService } from '../../telegram/telegram.service.js';

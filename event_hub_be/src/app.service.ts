@@ -1,21 +1,13 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class AppService implements OnModuleInit {
-  private readonly logger = new Logger(AppService.name);
-
-  constructor(private readonly dataSource: DataSource) {}
-
-  onModuleInit() {
-    if (this.dataSource.isInitialized) {
-      this.logger.log('✅ Kết nối PostgreSQL thành công!');
-    } else {
-      this.logger.error('❌ Không thể kết nối tới PostgreSQL!');
-    }
-  }
-
-  getHello(): string {
-    return 'Hello World!';
+export class AppService {
+  getHealth() {
+    return {
+      status: 'ok',
+      service: 'event_hub_be',
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
   }
 }

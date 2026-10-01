@@ -1,9 +1,8 @@
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
-import { User } from './auth/entity/user.entity.js';
+import { User } from './users/entity/user.entity.js';
 import { Event } from './events/entity/event.entity.js';
-import { CrawlerRun } from './crawler-runs/entity/crawler-run.entity.js';
-import { CrawlerSource } from './crawler-sources/entity/crawler-source.entity.js';
+import { CrawlerRun } from './crawlers/entity/crawler-run.entity.js';
 import { Setting } from './settings/entity/setting.entity.js';
 
 dotenv.config();
@@ -17,7 +16,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'event_hub',
   synchronize: false,
   logging: process.env.NODE_ENV !== 'production',
-  entities: [User, Event, CrawlerRun, CrawlerSource, Setting],
+  entities: [User, Event, CrawlerRun, Setting],
   migrations: ['src/migrations/*.ts'],
   subscribers: [],
 });

@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { LoginDto } from '../dto/login.dto.js';
-import { User } from '../entity/user.entity.js';
+import { User } from '../../users/entity/user.entity.js';
 import { Role } from '../enums/role.enum.js';
 
 @Injectable()
