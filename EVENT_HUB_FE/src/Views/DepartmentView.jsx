@@ -7,7 +7,7 @@ import AddEventModal from '../Components/AddEventModal';
 import { useEventsByDate } from '../API/useEventsByDate';
 import { settingsApi } from '../API/API';
 import { useFilterContext } from '../context/FilterContext';
-import { normalizeDepartment, DEFAULT_DEPARTMENTS } from '../utils/departments';
+import { normalizeDepartment } from '../utils/helpers';
 
 export default function DepartmentView({
   departmentCode = 'mkt',
@@ -20,7 +20,7 @@ export default function DepartmentView({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [allowedTypes, setAllowedTypes] = useState(null);
-  const [departmentsList, setDepartmentsList] = useState(DEFAULT_DEPARTMENTS);
+  const [departmentsList, setDepartmentsList] = useState([]);
   const { isEventVisible } = useFilterContext();
 
   const normalizedCode = normalizeDepartment(departmentCode);

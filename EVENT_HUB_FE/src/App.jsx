@@ -11,7 +11,7 @@ const MediaLibrary = lazy(() => import('./Views/MediaLibrary'));
 const Reports = lazy(() => import('./Views/Reports'));
 const Setting = lazy(() => import('./Views/Setting'));
 
-import { normalizeDepartment } from './utils/departments';
+import { normalizeDepartment } from './utils/helpers';
 
 const AUTH_KEY = 'event-hub-auth';
 const TOKEN_KEY = 'accessToken';

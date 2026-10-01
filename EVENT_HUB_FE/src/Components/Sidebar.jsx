@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useEventHubData } from '../API/useEventHubData';
 import { settingsApi } from '../API/API';
-import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../utils/departments';
+import { normalizeDepartment } from '../utils/helpers';
 import { useFilterContext } from '../context/FilterContext';
 
 const BASE_MENU_TOP = [
@@ -30,14 +30,6 @@ const BASE_MENU_BOTTOM = [
   { id: 'media-library', label: 'Thư viện ảnh', icon: ImageIcon },
   { id: 'reports', label: 'Báo cáo', icon: FileText },
   { id: 'setting', label: 'Cài đặt', icon: Settings },
-];
-
-const DEFAULT_QUICK_FILTERS = [
-  { id: 'all', label: 'Tất cả', color: 'bg-blue-600 border-blue-600' },
-  { id: 'mkt', label: 'MKT', color: 'bg-emerald-500 border-emerald-500' },
-  { id: 'sale', label: 'Kinh doanh', color: 'bg-cyan-500 border-cyan-500' },
-  { id: 'competitor', label: 'Đối thủ', color: 'bg-orange-500 border-orange-500' },
-  { id: 'internal', label: 'Sự kiện nội bộ', color: 'bg-purple-600 border-purple-600' },
 ];
 
 const FILTER_COLORS = [
@@ -67,7 +59,7 @@ function getDepartmentViewId(code) {
 export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user }) {
   const { data: sources } = useEventHubData();
   const { checkedFilters, toggleFilter } = useFilterContext();
-  const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS);
+  const [departments, setDepartments] = useState([]);
   const userDept = normalizeDepartment(user?.department);
   const isAdmin = user?.role === 'admin';
 
