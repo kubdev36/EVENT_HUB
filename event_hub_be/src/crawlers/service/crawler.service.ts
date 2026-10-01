@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { ClassifierService } from '../../classifier/classifier.service.js';
 import { Event } from '../../events/entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
@@ -30,6 +30,22 @@ export class CrawlerService {
     private readonly apiEngine: GenericApiEngine,
     private readonly htmlEngine: GenericHtmlEngine,
   ) {}
+
+  async notifyPendingEvents() {
+    const unnotifiedEvents = await this.eventRepository.find({
+      where: { notifiedAt: IsNull() },
+      order: { createdAt: 'ASC' },
+      take: 50,
+    });
+
+    for (const event of unnotifiedEvents) {
+      await this.notifyTelegram(event);
+      event.notifiedAt = new Date();
+      await this.eventRepository.save(event);
+      // Gentle pause to avoid Telegram rate-limiting
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  }
 
   async crawlAllTargets() {
     const targets = (await this.getCrawlerTargets()).filter((target) => target.enabled !== false);
@@ -145,7 +161,6 @@ export class CrawlerService {
 
         const savedEvent = await this.eventRepository.save(newEvent);
         newItemsCount += 1;
-        await this.notifyTelegram(savedEvent);
       }
 
       run.status = 'success';
@@ -180,7 +195,14 @@ export class CrawlerService {
 
     // 2. Fetch all configured target URLs
     for (const url of target.targetUrls || []) {
-      const isRssOrXml = url.includes('.rss') || url.includes('.xml') || url.includes('/feed');
+      const isRssOrXml =
+        url.includes('.rss') ||
+        url.includes('.xml') ||
+        url.includes('/feed') ||
+        url.includes('format=Atom') ||
+        url.includes('format=Mrss') ||
+        url.includes('bridge=') ||
+        url.includes(':3100');
       if (isRssOrXml) {
         // Generic RSS / Google News Sitemap Engine
         const rssItems = await this.rssEngine.fetchRssOrSitemap(url);

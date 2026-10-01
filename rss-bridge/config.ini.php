@@ -19,5 +19,6 @@ custom_timeout = true
 [FacebookBridge]
 ; Facebook Cookie authentication to bypass login wall
 ; Get c_user and xs from browser DevTools (F12 -> Application -> Cookies -> facebook.com)
-; c_user = "YOUR_C_USER_HERE"
-; xs = "YOUR_XS_TOKEN_HERE"
+c_user = "61594925552579"
+xs = "14%3ANWUWjdXSTu_Lbg%3A2%3A1790836431%3A-1%3A-1%3A%3AAcy7SANOuGPlLt-FqCLNekbENHr2zTNIGAtYYMr_cA"
+

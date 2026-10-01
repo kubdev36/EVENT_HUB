@@ -64,11 +64,17 @@ export class GenericRssEngine {
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
+      let image = entryNode.find('link[rel="enclosure"]').attr('href') || null;
+      if (!image && summary) {
+        const descMatch = summary.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (descMatch) image = descMatch[1];
+      }
+
       const parsedDate = DateExtractorHelper.parsePublishedDate(published);
       items.push({
         title,
         url: link,
-        image: null,
+        image: image && !NoiseFilterHelper.isNoiseImage(image) ? image : null,
         description: NoiseFilterHelper.cleanDescription(summary),
         eventDate: parsedDate?.date || null,
         eventTime: parsedDate?.time || null,
