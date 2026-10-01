@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { CrawlSource, CrawlTarget } from '../../crawlers/crawler.types.js';
 import { Setting } from '../entity/setting.entity.js';
 
-type SettingsKey = 'crawler_sources' | 'telegram_config' | 'keyword_rules' | 'department_rules';
+type SettingsKey = 'crawler_sources' | 'telegram_config' | 'keyword_rules' | 'department_rules' | 'departments_list';
 type CrawlerSourcesSetting =
   | { targets?: Array<Record<string, unknown>>; sources?: Array<Record<string, unknown>> }
   | Array<Record<string, unknown>>;
@@ -85,6 +85,10 @@ export class SettingsService {
 
     if (key === 'department_rules' && this.hasArrayProperty(value, 'rules')) {
       return value.rules;
+    }
+
+    if (key === 'departments_list' && this.hasArrayProperty(value, 'list')) {
+      return value.list;
     }
 
     return value;

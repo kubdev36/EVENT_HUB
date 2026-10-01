@@ -11,6 +11,8 @@ const MediaLibrary = lazy(() => import('./Views/MediaLibrary'));
 const Reports = lazy(() => import('./Views/Reports'));
 const Setting = lazy(() => import('./Views/Setting'));
 
+import { normalizeDepartment } from './constants/departments';
+
 const AUTH_KEY = 'event-hub-auth';
 const TOKEN_KEY = 'accessToken';
 const USER_KEY = 'user';
@@ -35,20 +37,17 @@ const VIEW_TO_PATH = Object.fromEntries(
 const VIEW_DEPARTMENTS = {
   marketing: 'mkt',
   sale: 'kinh_doanh',
+  'private-events': 'internal',
 };
-
-function normalizeDepartment(value) {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-
-  if (['marketing', 'marketting', 'mkt'].includes(normalized)) return 'mkt';
-  if (['sale', 'sales', 'kinh_doanh', 'kinhdoanh', 'kd'].includes(normalized)) return 'kinh_doanh';
-
-  return normalized;
-}
 
 function canAccessView(user, view) {
   if (user?.role === 'admin') return true;
   if (view === 'setting') return false;
+
+  if (view.startsWith('dept-')) {
+    const deptCode = view.replace('dept-', '');
+    return normalizeDepartment(user?.department) === normalizeDepartment(deptCode);
+  }
 
   const requiredDepartment = VIEW_DEPARTMENTS[view];
   if (!requiredDepartment) return true;
@@ -71,6 +70,10 @@ function getInitialUser() {
 
 function getViewFromLocation() {
   const path = window.location.pathname;
+  if (path.startsWith('/department/')) {
+    const code = path.replace('/department/', '');
+    return `dept-${code}`;
+  }
   return VIEW_PATHS[path] || localStorage.getItem(VIEW_KEY) || 'overview';
 }
 

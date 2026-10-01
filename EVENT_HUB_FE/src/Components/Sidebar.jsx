@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Home,
   Calendar,
@@ -15,22 +15,25 @@ import {
   X,
 } from 'lucide-react';
 import { useEventHubData } from '../API/useEventHubData';
+import { settingsApi } from '../API/API';
 import { getBrandLogo } from '../constants/brandLogos';
+import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../constants/departments';
+import { useFilterContext } from '../context/FilterContext';
 
-const MENU_ITEMS = [
+const BASE_MENU_TOP = [
   { id: 'overview', label: 'Tổng quan', icon: Home },
   { id: 'month', label: 'Lịch tháng', icon: Calendar },
   { id: 'daily', label: 'Xem theo ngày', icon: CalendarDays },
-  { id: 'marketing', label: 'MKT', icon: Megaphone },
-  { id: 'sale', label: 'Kinh doanh', icon: Store },
+];
+
+const BASE_MENU_BOTTOM = [
   { id: 'competitors', label: 'Đối thủ', icon: Users },
-  { id: 'private-events', label: 'Sự kiện nội bộ', icon: Building2 },
   { id: 'media-library', label: 'Thư viện ảnh', icon: ImageIcon },
   { id: 'reports', label: 'Báo cáo', icon: FileText },
   { id: 'setting', label: 'Cài đặt', icon: Settings },
 ];
 
-const QUICK_FILTERS = [
+const DEFAULT_QUICK_FILTERS = [
   { id: 'all', label: 'Tất cả', color: 'bg-blue-600 border-blue-600' },
   { id: 'mkt', label: 'MKT', color: 'bg-emerald-500 border-emerald-500' },
   { id: 'sale', label: 'Kinh doanh', color: 'bg-cyan-500 border-cyan-500' },
@@ -38,37 +41,79 @@ const QUICK_FILTERS = [
   { id: 'internal', label: 'Sự kiện nội bộ', color: 'bg-purple-600 border-purple-600' },
 ];
 
-import { useFilterContext } from '../context/FilterContext';
+const FILTER_COLORS = [
+  'bg-emerald-500 border-emerald-500',
+  'bg-cyan-500 border-cyan-500',
+  'bg-purple-600 border-purple-600',
+  'bg-indigo-500 border-indigo-500',
+  'bg-amber-500 border-amber-500',
+  'bg-rose-500 border-rose-500',
+];
 
-const MENU_DEPARTMENTS = {
-  marketing: 'mkt',
-  sale: 'kinh_doanh',
-};
+function getDepartmentIcon(code) {
+  const norm = normalizeDepartment(code);
+  if (norm === 'mkt') return Megaphone;
+  if (norm === 'kinh_doanh') return Store;
+  return Building2;
+}
 
-const FILTER_DEPARTMENTS = {
-  mkt: 'mkt',
-  sale: 'kinh_doanh',
-};
-
-function normalizeDepartment(value) {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-
-  if (['marketing', 'marketting', 'mkt'].includes(normalized)) return 'mkt';
-  if (['sale', 'sales', 'kinh_doanh', 'kinhdoanh', 'kd'].includes(normalized)) return 'kinh_doanh';
-
-  return normalized;
+function getDepartmentViewId(code) {
+  const norm = normalizeDepartment(code);
+  if (norm === 'mkt') return 'marketing';
+  if (norm === 'kinh_doanh') return 'sale';
+  if (norm === 'internal') return 'private-events';
+  return `dept-${norm}`;
 }
 
 export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user }) {
   const { data: sources } = useEventHubData();
   const { checkedFilters, toggleFilter } = useFilterContext();
-  const department = normalizeDepartment(user?.department);
-  const menuItems = user?.role === 'admin'
-    ? MENU_ITEMS
-    : MENU_ITEMS.filter((item) => item.id !== 'setting' && (!MENU_DEPARTMENTS[item.id] || MENU_DEPARTMENTS[item.id] === department));
-  const quickFilters = user?.role === 'admin'
-    ? QUICK_FILTERS
-    : QUICK_FILTERS.filter((item) => !FILTER_DEPARTMENTS[item.id] || FILTER_DEPARTMENTS[item.id] === department);
+  const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS);
+  const userDept = normalizeDepartment(user?.department);
+  const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    let active = true;
+    settingsApi.getAll()
+      .then((res) => {
+        if (!active) return;
+        const list = res.data?.departments_list;
+        if (Array.isArray(list) && list.length > 0) {
+          setDepartments(list);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  // Construct dynamic department menu items
+  const deptMenuItems = departments
+    .filter((dept) => isAdmin || normalizeDepartment(dept.code) === userDept)
+    .map((dept) => ({
+      id: getDepartmentViewId(dept.code),
+      label: dept.name,
+      icon: getDepartmentIcon(dept.code),
+      code: dept.code,
+    }));
+
+  const menuItems = [
+    ...BASE_MENU_TOP,
+    ...deptMenuItems,
+    ...BASE_MENU_BOTTOM.filter((item) => (item.id === 'setting' ? isAdmin : true)),
+  ];
+
+  // Quick filters
+  const quickFilters = [
+    { id: 'all', label: 'Tất cả', color: 'bg-blue-600 border-blue-600' },
+    ...departments
+      .filter((dept) => isAdmin || normalizeDepartment(dept.code) === userDept)
+      .map((dept, idx) => ({
+        id: normalizeDepartment(dept.code) === 'kinh_doanh' ? 'sale' : normalizeDepartment(dept.code),
+        label: dept.name,
+        color: FILTER_COLORS[idx % FILTER_COLORS.length],
+      })),
+    { id: 'competitor', label: 'Đối thủ', color: 'bg-orange-500 border-orange-500' },
+  ];
 
   const handleItemClick = (id) => {
     onNavigate?.(id);

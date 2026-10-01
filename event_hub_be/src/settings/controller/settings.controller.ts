@@ -157,9 +157,17 @@ export class SettingsController {
 
   @Post('departments')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Save department rules' })
+  @ApiOperation({ summary: 'Save department rules and list' })
   async updateDepartments(@Body() data: any) {
-    return this.settingsService.saveSetting('department_rules', data);
+    if (data.list) {
+      await this.settingsService.saveSetting('departments_list', data.list);
+    }
+    if (data.rules) {
+      await this.settingsService.saveSetting('department_rules', data.rules);
+    } else if (Array.isArray(data)) {
+      await this.settingsService.saveSetting('department_rules', data);
+    }
+    return { message: 'Department settings saved successfully' };
   }
 
   @Post('crawler/run')

@@ -21,6 +21,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { DEFAULT_DEPARTMENTS, normalizeDepartment } from '../constants/departments';
 import { settingsApi, usersApi } from '../API/API';
 import { useEventHubData } from '../API/useEventHubData';
 import { getBrandLogo } from '../constants/brandLogos';
@@ -38,6 +39,7 @@ export default function Setting() {
   const [telegramConfig, setTelegramConfig] = useState(EMPTY_TELEGRAM_CONFIG);
   const [keywordRules, setKeywordRules] = useState([]);
   const [departmentRules, setDepartmentRules] = useState([]);
+  const [departmentsList, setDepartmentsList] = useState(DEFAULT_DEPARTMENTS);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -79,6 +81,9 @@ export default function Setting() {
         if (settings.telegram_config) setTelegramConfig({ ...EMPTY_TELEGRAM_CONFIG, ...settings.telegram_config });
         if (settings.keyword_rules) setKeywordRules(settings.keyword_rules);
         if (settings.department_rules) setDepartmentRules(settings.department_rules);
+        if (settings.departments_list && Array.isArray(settings.departments_list) && settings.departments_list.length > 0) {
+          setDepartmentsList(settings.departments_list);
+        }
         if (settings.crawler_sources) {
           setCrawlers(
             settings.crawler_sources.map((item) => ({
@@ -95,7 +100,7 @@ export default function Setting() {
             id: user.id,
             name: user.email,
             email: user.email,
-            department: user.department || 'MKT',
+            department: user.department || 'mkt',
             role: user.role === 'admin' ? 'Admin' : 'Staff',
             status: user.isActive ? 'active' : 'inactive',
           }))
@@ -170,7 +175,9 @@ export default function Setting() {
       });
     } else {
       if (mode === 'add-crawler') setFormData({ name: '', logo: '', interval: '6h', targetUrls: [''] });
-      if (mode === 'add-user') setFormData({ name: '', email: '', password: '', department: 'MKT', role: 'Staff' });
+      if (mode === 'add-user') setFormData({ name: '', email: '', password: '', department: departmentsList[0]?.code || 'mkt', role: 'Staff' });
+      if (mode === 'add-department') setFormData({ code: '', name: '', desc: '' });
+      if (mode === 'edit-department') setFormData({ code: item?.code || '', name: item?.name || '', desc: item?.desc || '' });
     }
   };
 
@@ -207,7 +214,7 @@ export default function Setting() {
           id: u.id,
           name: u.email,
           email: u.email,
-          department: u.department || 'MKT',
+          department: u.department || 'mkt',
           role: u.role === 'admin' ? 'Admin' : 'Staff',
           status: u.isActive ? 'active' : 'inactive',
         }))
@@ -286,7 +293,7 @@ export default function Setting() {
   const handleSaveDepartmentRules = async () => {
     setSettingsSaving(true);
     try {
-      await settingsApi.saveDepartments({ rules: departmentRules });
+      await settingsApi.saveDepartments({ rules: departmentRules, list: departmentsList });
       setStatusMessage('Đã lưu phân loại phòng ban thành công.');
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Lưu phân loại phòng ban thất bại.');
@@ -327,7 +334,7 @@ export default function Setting() {
           email: formData.email,
           password: formData.password || 'EventHub@2026',
           role: (formData.role || 'Staff').toLowerCase(),
-          department: formData.department || 'MKT',
+          department: formData.department || departmentsList[0]?.code || 'mkt',
         });
         await reloadUsers();
         setStatusMessage(`Đã thêm nhân viên ${formData.email}.`);
@@ -336,7 +343,7 @@ export default function Setting() {
           email: formData.email,
           password: formData.password && !formData.password.includes('•') ? formData.password : undefined,
           role: (formData.role || 'Staff').toLowerCase(),
-          department: formData.department || 'MKT',
+          department: formData.department || departmentsList[0]?.code || 'mkt',
         });
         await reloadUsers();
         setStatusMessage(`Đã cập nhật nhân viên ${formData.email}.`);
@@ -354,6 +361,46 @@ export default function Setting() {
         setKeywordRules(updatedRules);
         await settingsApi.saveKeywords({ rules: updatedRules });
         setStatusMessage('Đã lưu từ khóa phân loại.');
+      } else if (modalMode === 'add-department') {
+        const rawCode = (formData.code || formData.name || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+        if (!rawCode || !formData.name?.trim()) {
+          setStatusMessage('Vui lòng nhập đầy đủ tên và mã phòng ban.');
+          return;
+        }
+        if (departmentsList.some((d) => d.code === rawCode)) {
+          setStatusMessage(`Mã phòng ban "${rawCode}" đã tồn tại.`);
+          return;
+        }
+        const newDept = {
+          code: rawCode,
+          name: formData.name.trim(),
+          desc: formData.desc?.trim() || '',
+        };
+        const updatedList = [...departmentsList, newDept];
+        setDepartmentsList(updatedList);
+        await settingsApi.saveDepartments({ list: updatedList, rules: departmentRules });
+        setStatusMessage(`Đã thêm phòng ban ${newDept.name} thành công.`);
+      } else if (modalMode === 'edit-department') {
+        if (!formData.name?.trim()) {
+          setStatusMessage('Tên phòng ban không được để trống.');
+          return;
+        }
+        const updatedList = departmentsList.map((d) =>
+          d.code === selectedItem.code ? { ...d, name: formData.name.trim(), desc: formData.desc?.trim() || '' } : d
+        );
+        setDepartmentsList(updatedList);
+        await settingsApi.saveDepartments({ list: updatedList, rules: departmentRules });
+        setStatusMessage(`Đã cập nhật phòng ban ${formData.name}.`);
+      } else if (modalMode === 'delete-department') {
+        const updatedList = departmentsList.filter((d) => d.code !== selectedItem.code);
+        const updatedRules = departmentRules.map((rule) => ({
+          ...rule,
+          departments: (rule.departments || []).filter((d) => d !== selectedItem.code),
+        }));
+        setDepartmentsList(updatedList);
+        setDepartmentRules(updatedRules);
+        await settingsApi.saveDepartments({ list: updatedList, rules: updatedRules });
+        setStatusMessage(`Đã xóa phòng ban ${selectedItem.name}.`);
       }
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Thao tác thất bại.');
@@ -623,55 +670,102 @@ export default function Setting() {
         )}
 
         {activeTab === 'departments' && (
-          <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Phân loại nhãn sự kiện cho từng Phòng ban</h2>
-                <p className="text-[11px] text-slate-500 mt-0.5">Tích chọn để chia nhãn sự kiện tương ứng cho phòng Marketing và Kinh doanh</p>
+          <div className="space-y-4 w-full">
+            {/* 1. Quản lý danh sách phòng ban */}
+            <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Danh sách Phòng ban ({departmentsList.length})</h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Quản lý các phòng ban trong công ty, phân quyền và hiển thị trên menu</p>
+                </div>
+                <button
+                  onClick={() => handleOpenModal('add-department')}
+                  className="h-8.5 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs self-start sm:self-auto"
+                >
+                  <Plus size={14} />
+                  <span>Thêm phòng ban</span>
+                </button>
               </div>
-              <button
-                onClick={handleSaveDepartmentRules}
-                disabled={settingsSaving}
-                className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-2xs disabled:opacity-50 shrink-0 self-start sm:self-auto"
-              >
-                {settingsSaving ? 'Đang lưu...' : 'Lưu phân loại'}
-              </button>
-            </div>
 
-            <div className="divide-y divide-slate-100">
-              {departmentRules.map((rule) => {
-                const isMkt = (rule.departments || []).includes('mkt');
-                const isKinhDoanh = (rule.departments || []).includes('kinh_doanh');
-
-                return (
-                  <div key={rule.type} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 px-2 rounded-lg transition">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {departmentsList.map((dept) => (
+                  <div key={dept.code} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex flex-col justify-between gap-2.5 transition">
                     <div>
-                      <span className="font-bold text-slate-800 text-xs sm:text-sm">{rule.label}</span>
-                      <span className="ml-2 font-mono text-[10px] text-slate-400">({rule.type})</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-slate-900 text-xs sm:text-sm">{dept.name}</span>
+                        <span className="font-mono text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-semibold">
+                          {dept.code}
+                        </span>
+                      </div>
+                      {dept.desc && (
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{dept.desc}</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-6 shrink-0">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium select-none">
-                        <input
-                          type="checkbox"
-                          checked={isMkt}
-                          onChange={() => handleToggleDepartment(rule.type, 'mkt')}
-                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                        />
-                        <span>Marketing</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium select-none">
-                        <input
-                          type="checkbox"
-                          checked={isKinhDoanh}
-                          onChange={() => handleToggleDepartment(rule.type, 'kinh_doanh')}
-                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                        />
-                        <span>Kinh doanh</span>
-                      </label>
+                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200/60">
+                      <button
+                        onClick={() => handleOpenModal('edit-department', dept)}
+                        className="h-7 px-2.5 rounded text-blue-600 hover:bg-blue-50 font-semibold flex items-center gap-1 transition cursor-pointer text-[11px]"
+                      >
+                        <Edit2 size={12} />
+                        <span>Sửa</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenModal('delete-department', dept)}
+                        className="h-7 px-2.5 rounded text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-1 transition cursor-pointer text-[11px]"
+                      >
+                        <Trash2 size={12} />
+                        <span>Xóa</span>
+                      </button>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Phân loại nhãn sự kiện */}
+            <div className="w-full bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Phân loại nhãn sự kiện theo Phòng ban</h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Tích chọn để chia luồng sự kiện tương ứng cho từng phòng ban</p>
+                </div>
+                <button
+                  onClick={handleSaveDepartmentRules}
+                  disabled={settingsSaving}
+                  className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-2xs disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                >
+                  {settingsSaving ? 'Đang lưu...' : 'Lưu phân loại'}
+                </button>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {departmentRules.map((rule) => {
+                  return (
+                    <div key={rule.type} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/50 px-2 rounded-lg transition">
+                      <div className="min-w-[180px]">
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm">{rule.label}</span>
+                        <span className="ml-2 font-mono text-[10px] text-slate-400">({rule.type})</span>
+                      </div>
+                      <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
+                        {departmentsList.map((dept) => {
+                          const isChecked = (rule.departments || []).includes(dept.code);
+                          return (
+                            <label key={dept.code} className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium select-none text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleDepartment(rule.type, dept.code)}
+                                className="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600"
+                              />
+                              <span>{dept.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -821,6 +915,9 @@ export default function Setting() {
                 {modalMode === 'delete-user' && 'Xác nhận xóa nhân viên'}
                 {modalMode === 'reset-pass' && 'Reset mật khẩu'}
                 {modalMode === 'edit-keyword' && 'Sửa từ khóa phân loại'}
+                {modalMode === 'add-department' && 'Thêm phòng ban mới'}
+                {modalMode === 'edit-department' && 'Chỉnh sửa phòng ban'}
+                {modalMode === 'delete-department' && 'Xác nhận xóa phòng ban'}
               </div>
               <button onClick={handleCloseModal} className="p-1 text-white/80 hover:text-white rounded-lg cursor-pointer">
                 <X size={16} />
@@ -828,6 +925,69 @@ export default function Setting() {
             </div>
 
             <div className="p-4 space-y-3.5 text-xs">
+              {(modalMode === 'add-department' || modalMode === 'edit-department') && (
+                <>
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700">Tên phòng ban: <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      value={formData.name || ''}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        const code = modalMode === 'add-department' && !formData.codeEdited
+                          ? name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+                          : formData.code;
+                        setFormData({ ...formData, name, code });
+                      }}
+                      placeholder="VD: Chăm sóc khách hàng, Vận hành, Kỹ thuật..."
+                      className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700">Mã định danh (Code / Slug): <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      disabled={modalMode === 'edit-department'}
+                      value={formData.code || ''}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'), codeEdited: true })}
+                      placeholder="VD: cskh, van_hanh, ky_thuat"
+                      className={`w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none font-mono text-[11px] ${
+                        modalMode === 'edit-department' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'focus:border-blue-500'
+                      }`}
+                    />
+                    {modalMode === 'add-department' && (
+                      <p className="text-[10px] text-slate-400">Dùng làm mã hệ thống và phân quyền nhân viên</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-700">Mô tả / Chức năng:</label>
+                    <textarea
+                      rows={2}
+                      value={formData.desc || ''}
+                      onChange={(e) => setFormData({ ...formData, desc: e.target.value })}
+                      placeholder="VD: Quản lý khách hàng, tiếp nhận thông tin..."
+                      className="w-full rounded-lg border border-slate-200 p-2 outline-none text-xs focus:border-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {modalMode === 'delete-department' && (
+                <div className="flex items-start gap-3 py-2 text-slate-600">
+                  <div className="p-2 rounded-xl bg-rose-50 text-rose-600 shrink-0">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900">Bạn có chắc chắn muốn xóa phòng ban này?</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Phòng ban <span className="font-semibold text-slate-800">{selectedItem?.name} ({selectedItem?.code})</span> sẽ bị xóa khỏi menu và bộ lọc phân loại.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {(modalMode === 'add-crawler' || modalMode === 'edit-crawler') && (
                 <>
                   <div className="space-y-1">
@@ -990,13 +1150,15 @@ export default function Setting() {
                     <div className="space-y-1">
                       <label className="font-semibold text-slate-700">Phòng ban:</label>
                       <select
-                        value={formData.department || 'MKT'}
+                        value={formData.department || departmentsList[0]?.code || 'mkt'}
                         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                         className="w-full h-8.5 rounded-lg border border-slate-200 px-2 outline-none bg-white"
                       >
-                        <option value="MKT">MKT</option>
-                        <option value="Kinh doanh">Kinh doanh</option>
-                        <option value="Vận hành">Vận hành</option>
+                        {departmentsList.map((dept) => (
+                          <option key={dept.code} value={dept.code}>
+                            {dept.name} ({dept.code})
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-1">
