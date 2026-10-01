@@ -116,7 +116,6 @@ export class CrawlerService {
         if (!type) continue;
 
         const dateInfo = DateExtractorHelper.parseItemEventDate(item);
-        if (dateInfo.date && dateInfo.date < new Date('2025-01-01')) continue;
 
         const contentHash = UrlNormalizerHelper.buildContentHash(target.id, item.url, item.title);
         const existing = await this.eventRepository.findOne({
@@ -130,7 +129,8 @@ export class CrawlerService {
           if (item.image && !NoiseFilterHelper.isNoiseImage(item.image)) {
             existing.image = item.image;
           }
-          if (dateInfo.date && !isNaN(dateInfo.date.getTime())) {
+          // Only update eventDate if we found an explicit real date from this item
+          if (dateInfo.isExplicit && dateInfo.date && !isNaN(dateInfo.date.getTime())) {
             existing.eventDate = dateInfo.date;
             existing.eventTime = dateInfo.time || existing.eventTime;
           }
@@ -140,6 +140,9 @@ export class CrawlerService {
         }
 
         // Create new Event
+        const eventDate = dateInfo.date || new Date();
+        if (eventDate < new Date('2025-01-01')) continue;
+
         const newEvent = this.eventRepository.create({
           sourceId: target.id,
           sourceName: target.name,
@@ -149,8 +152,8 @@ export class CrawlerService {
           description: item.description ?? null,
           image: item.image && !NoiseFilterHelper.isNoiseImage(item.image) ? item.image : null,
           url: item.url,
-          eventDate: dateInfo.date,
-          eventTime: dateInfo.time,
+          eventDate,
+          eventTime: dateInfo.time || '09:00',
           type,
           rawData: item.rawData ?? null,
           contentHash,

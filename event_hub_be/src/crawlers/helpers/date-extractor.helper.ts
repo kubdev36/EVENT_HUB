@@ -142,20 +142,20 @@ export class DateExtractorHelper {
     return null;
   }
 
-  static parseItemEventDate(item: ParsedCrawlItem, referenceDate: Date = new Date()): { date: Date | null; time: string | null } {
+  static parseItemEventDate(item: ParsedCrawlItem): { date: Date | null; time: string | null; isExplicit: boolean } {
     if (item.eventDate && !isNaN(item.eventDate.getTime())) {
       const timeStr = item.eventTime || `${String(item.eventDate.getHours()).padStart(2, '0')}:${String(item.eventDate.getMinutes()).padStart(2, '0')}`;
-      return { date: item.eventDate, time: timeStr };
+      return { date: item.eventDate, time: timeStr, isExplicit: true };
     }
 
     // 1. Search date inside description or title
-    const descDate = this.parsePublishedDate(item.description, referenceDate) || this.parsePublishedDate(item.title, referenceDate);
-    if (descDate) return descDate;
+    const descDate = this.parsePublishedDate(item.description) || this.parsePublishedDate(item.title);
+    if (descDate) return { ...descDate, isExplicit: true };
 
     // 2. Search date inside URL path
     const urlDate = this.parseDateFromUrl(item.url);
-    if (urlDate) return urlDate;
+    if (urlDate) return { ...urlDate, isExplicit: true };
 
-    return { date: referenceDate, time: '09:00' };
+    return { date: null, time: '09:00', isExplicit: false };
   }
 }
