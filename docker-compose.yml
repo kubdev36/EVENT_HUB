@@ -81,6 +81,7 @@ services:
     volumes:
       - ./rss-bridge/config.ini.php:/app/config.ini.php:ro
       - ./rss-bridge/whitelist.txt:/app/whitelist.txt:ro
+      - ./rss-bridge/FacebookBridge.php:/app/bridges/FacebookBridge.php:ro
 
 volumes:
   postgres_data:
