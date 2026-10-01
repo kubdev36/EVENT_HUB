@@ -6,9 +6,7 @@ const Daily = lazy(() => import('./Views/Daily'));
 const Month = lazy(() => import('./Views/Month'));
 const OverView = lazy(() => import('./Views/OverView'));
 const Competitors = lazy(() => import('./Views/Competitors'));
-const Marketting = lazy(() => import('./Views/Marketting'));
-const Sale = lazy(() => import('./Views/Sale'));
-const PrivateEvents = lazy(() => import('./Views/PrivateEvents'));
+const DepartmentView = lazy(() => import('./Views/DepartmentView'));
 const MediaLibrary = lazy(() => import('./Views/MediaLibrary'));
 const Reports = lazy(() => import('./Views/Reports'));
 const Setting = lazy(() => import('./Views/Setting'));
@@ -108,7 +106,7 @@ export default function App() {
       view = 'overview';
     }
 
-    const path = VIEW_TO_PATH[view] || '/overview';
+    const path = VIEW_TO_PATH[view] || (view.startsWith('dept-') ? `/department/${view.replace('dept-', '')}` : '/overview');
     setCurrentView(view);
     localStorage.setItem(VIEW_KEY, view);
     window.history.pushState({}, '', path);
@@ -146,11 +144,11 @@ export default function App() {
       case 'competitors':
         return <Competitors />;
       case 'marketing':
-        return <Marketting />;
+        return <DepartmentView departmentCode="mkt" />;
       case 'sale':
-        return <Sale />;
+        return <DepartmentView departmentCode="kinh_doanh" />;
       case 'private-events':
-        return <PrivateEvents />;
+        return <DepartmentView departmentCode="internal" />;
       case 'media-library':
         return <MediaLibrary />;
       case 'reports':
@@ -158,6 +156,10 @@ export default function App() {
       case 'setting':
         return isAdmin ? <Setting /> : <OverView />;
       default:
+        if (currentView.startsWith('dept-')) {
+          const dept = currentView.replace('dept-', '');
+          return <DepartmentView departmentCode={dept} />;
+        }
         return <OverView />;
     }
   }, [currentView, isAdmin]);
