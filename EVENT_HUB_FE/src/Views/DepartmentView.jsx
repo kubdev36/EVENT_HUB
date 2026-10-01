@@ -7,54 +7,7 @@ import AddEventModal from '../Components/AddEventModal';
 import { useEventsByDate } from '../API/useEventsByDate';
 import { settingsApi } from '../API/API';
 import { useFilterContext } from '../context/FilterContext';
-
-export const DEPARTMENT_META = {
-  mkt: {
-    title: 'Marketing',
-    description: 'Chỉ hiển thị sự kiện của phòng Marketing (Quảng cáo, Sự kiện, Minigame)',
-    defaultType: 'ads',
-  },
-  marketing: {
-    title: 'Marketing',
-    description: 'Chỉ hiển thị sự kiện của phòng Marketing (Quảng cáo, Sự kiện, Minigame)',
-    defaultType: 'ads',
-    code: 'mkt',
-  },
-  kinh_doanh: {
-    title: 'Kinh doanh',
-    description: 'Chỉ hiển thị sự kiện của phòng Kinh doanh (Khuyến mãi, Ra mắt, Mở bán)',
-    defaultType: 'promo',
-  },
-  sale: {
-    title: 'Kinh doanh',
-    description: 'Chỉ hiển thị sự kiện của phòng Kinh doanh (Khuyến mãi, Ra mắt, Mở bán)',
-    defaultType: 'promo',
-    code: 'kinh_doanh',
-  },
-  internal: {
-    title: 'Sự kiện nội bộ',
-    description: 'Chỉ hiển thị sự kiện nội bộ và ra mắt sản phẩm của Minh Tuấn Mobile',
-    competitorId: 'minhtuan',
-    defaultType: 'internal',
-    predefinedTypes: ['internal', 'release'],
-  },
-  'private-events': {
-    title: 'Sự kiện nội bộ',
-    description: 'Chỉ hiển thị sự kiện nội bộ và ra mắt sản phẩm của Minh Tuấn Mobile',
-    competitorId: 'minhtuan',
-    defaultType: 'internal',
-    predefinedTypes: ['internal', 'release'],
-    code: 'internal',
-  },
-};
-
-function normalizeDeptCode(dept) {
-  const normalized = String(dept || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (['marketing', 'marketting', 'mkt'].includes(normalized)) return 'mkt';
-  if (['sale', 'sales', 'kinh_doanh', 'kinhdoanh', 'kd'].includes(normalized)) return 'kinh_doanh';
-  if (['internal', 'noi_bo', 'private_events', 'private-events'].includes(normalized)) return 'internal';
-  return normalized;
-}
+import { normalizeDepartment, DEFAULT_DEPARTMENTS } from '../utils/departments';
 
 export default function DepartmentView({
   departmentCode = 'mkt',
@@ -67,35 +20,46 @@ export default function DepartmentView({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [allowedTypes, setAllowedTypes] = useState(null);
+  const [departmentsList, setDepartmentsList] = useState(DEFAULT_DEPARTMENTS);
   const { isEventVisible } = useFilterContext();
 
-  const normalizedCode = normalizeDeptCode(departmentCode);
-  const meta = DEPARTMENT_META[departmentCode] || DEPARTMENT_META[normalizedCode] || {};
+  const normalizedCode = normalizeDepartment(departmentCode);
+  const isInternal = normalizedCode === 'internal';
 
-  const title = customTitle || meta.title || (normalizedCode ? `Phòng ${normalizedCode.toUpperCase()}` : 'Phòng ban');
-  const description = customDescription || meta.description || `Sự kiện và hoạt động dành cho bộ phận ${title}`;
-  const competitorId = customCompetitorId || meta.competitorId || null;
-  const defaultType = meta.defaultType || 'promo';
+  // Find department metadata dynamically from departmentsList
+  const currentDept = useMemo(() => {
+    return departmentsList.find((d) => normalizeDepartment(d.code) === normalizedCode);
+  }, [departmentsList, normalizedCode]);
+
+  const title = customTitle || currentDept?.name || (isInternal ? 'Sự kiện nội bộ' : `Phòng ${normalizedCode.toUpperCase()}`);
+  const description = customDescription || currentDept?.desc || `Sự kiện và hoạt động dành cho bộ phận ${title}`;
+  const competitorId = customCompetitorId || (isInternal ? 'minhtuan' : null);
+  const defaultType = isInternal ? 'internal' : (normalizedCode === 'mkt' ? 'ads' : 'promo');
 
   const dateStr = selectedDate.toLocaleDateString('en-CA');
   const { sources, refetch } = useEventsByDate(dateStr);
 
   useEffect(() => {
-    if (meta.predefinedTypes) {
-      setAllowedTypes(meta.predefinedTypes);
-      return;
-    }
-
     let active = true;
     settingsApi
       .getAll()
       .then((res) => {
         if (!active) return;
+        const list = res.data?.departments_list;
+        if (Array.isArray(list) && list.length > 0) {
+          setDepartmentsList(list);
+        }
+
+        if (isInternal) {
+          setAllowedTypes(['internal', 'release']);
+          return;
+        }
+
         const rules = res.data?.department_rules;
         if (Array.isArray(rules) && rules.length > 0) {
           const deptTypes = rules
             .filter((r) =>
-              (r.departments || []).some((d) => normalizeDeptCode(d) === normalizedCode)
+              (r.departments || []).some((d) => normalizeDepartment(d) === normalizedCode)
             )
             .map((r) => r.type);
 
@@ -109,7 +73,7 @@ export default function DepartmentView({
     return () => {
       active = false;
     };
-  }, [normalizedCode, meta.predefinedTypes]);
+  }, [normalizedCode, isInternal]);
 
   const displayCompetitors = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
