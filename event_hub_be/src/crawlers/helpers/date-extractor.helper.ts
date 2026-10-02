@@ -32,20 +32,22 @@ export class DateExtractorHelper {
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/đ/g, 'd');
 
+    const refTime = this.formatTimeFromDate(referenceDate);
+
     if (lower.includes('hom qua') || lower.includes('homqua')) {
       const d = new Date(referenceDate);
       d.setDate(d.getDate() - 1);
-      return { date: d, time: '09:00' };
+      return { date: d, time: refTime };
     }
 
     if (lower.includes('hom kia') || lower.includes('homkia')) {
       const d = new Date(referenceDate);
       d.setDate(d.getDate() - 2);
-      return { date: d, time: '09:00' };
+      return { date: d, time: refTime };
     }
 
     if (lower.includes('vua xong') || lower.includes('vua dang')) {
-      return { date: new Date(referenceDate), time: '09:00' };
+      return { date: new Date(referenceDate), time: refTime };
     }
 
     const relMatch = lower.match(/(\d+)\s*(gio|ngay|phut|tuan|thang)\s*truoc/i);
@@ -59,7 +61,7 @@ export class DateExtractorHelper {
       else if (unit.includes('tuan')) d.setDate(d.getDate() - amount * 7);
       else if (unit.includes('thang')) d.setMonth(d.getMonth() - amount);
 
-      const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const timeStr = this.formatTimeFromDate(d);
       return { date: d, time: timeStr };
     }
 
@@ -71,7 +73,7 @@ export class DateExtractorHelper {
       const d = parseInt(dayStr, 10);
       const y = parseInt(yearStr, 10);
       if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2020 && y <= 2035) {
-        return { date: new Date(y, m - 1, d, 9, 0), time: '09:00' };
+        return { date: new Date(y, m - 1, d, 9, 0), time: refTime };
       }
     }
 
@@ -83,7 +85,7 @@ export class DateExtractorHelper {
       const m = parseInt(monthStr, 10);
       const y = parseInt(yearStr, 10);
       if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2020 && y <= 2035) {
-        return { date: new Date(y, m - 1, d, 9, 0), time: '09:00' };
+        return { date: new Date(y, m - 1, d, 9, 0), time: refTime };
       }
     }
 
@@ -95,7 +97,7 @@ export class DateExtractorHelper {
       const month = parseInt(monthStr, 10);
       if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
         const year = yearStr ? parseInt(yearStr, 10) : referenceDate.getFullYear();
-        return { date: new Date(year, month - 1, day, 9, 0), time: '09:00' };
+        return { date: new Date(year, month - 1, day, 9, 0), time: refTime };
       }
     }
 
@@ -107,15 +109,25 @@ export class DateExtractorHelper {
       const month = parseInt(mStr, 10);
       const year = parseInt(yStr, 10);
       if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 2020 && year <= 2035) {
-        return { date: new Date(year, month - 1, day, 9, 0), time: '09:00' };
+        return { date: new Date(year, month - 1, day, 9, 0), time: refTime };
       }
     }
 
     return null;
   }
 
-  static parseDateFromUrl(url: string | null | undefined): { date: Date; time: string } | null {
+  private static formatTimeFromDate(d: Date): string {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+  }
+
+  static parseDateFromUrl(url: string | null | undefined, referenceDate: Date = new Date()): { date: Date; time: string } | null {
     if (!url) return null;
+    const refTime = this.formatTimeFromDate(referenceDate);
     
     // Check /2026/09/29/ or /2026-09-29/
     const ymdMatch = url.match(/\/(202[0-9])[\/\-_](0?[1-9]|1[0-2])[\/\-_](0?[1-9]|[12][0-9]|3[01])(?:\/|_|-|\.|$)/);
@@ -124,7 +136,7 @@ export class DateExtractorHelper {
       const month = parseInt(ymdMatch[2], 10);
       const day = parseInt(ymdMatch[3], 10);
       if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-        return { date: new Date(year, month - 1, day, 9, 0), time: '09:00' };
+        return { date: new Date(year, month - 1, day, 9, 0), time: refTime };
       }
     }
 
@@ -135,27 +147,27 @@ export class DateExtractorHelper {
       const month = parseInt(dmyMatch[2], 10);
       const year = parseInt(dmyMatch[3], 10);
       if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-        return { date: new Date(year, month - 1, day, 9, 0), time: '09:00' };
+        return { date: new Date(year, month - 1, day, 9, 0), time: refTime };
       }
     }
 
     return null;
   }
 
-  static parseItemEventDate(item: ParsedCrawlItem): { date: Date | null; time: string | null; isExplicit: boolean } {
+  static parseItemEventDate(item: ParsedCrawlItem, referenceDate: Date = new Date()): { date: Date | null; time: string | null; isExplicit: boolean } {
     if (item.eventDate && !isNaN(item.eventDate.getTime())) {
-      const timeStr = item.eventTime || `${String(item.eventDate.getHours()).padStart(2, '0')}:${String(item.eventDate.getMinutes()).padStart(2, '0')}`;
+      const timeStr = item.eventTime || this.formatTimeFromDate(item.eventDate);
       return { date: item.eventDate, time: timeStr, isExplicit: true };
     }
 
     // 1. Search date inside description or title
-    const descDate = this.parsePublishedDate(item.description) || this.parsePublishedDate(item.title);
+    const descDate = this.parsePublishedDate(item.description, referenceDate) || this.parsePublishedDate(item.title, referenceDate);
     if (descDate) return { ...descDate, isExplicit: true };
 
     // 2. Search date inside URL path
-    const urlDate = this.parseDateFromUrl(item.url);
+    const urlDate = this.parseDateFromUrl(item.url, referenceDate);
     if (urlDate) return { ...urlDate, isExplicit: true };
 
-    return { date: null, time: '09:00', isExplicit: false };
+    return { date: null, time: this.formatTimeFromDate(referenceDate), isExplicit: false };
   }
 }
