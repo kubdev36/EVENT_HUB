@@ -32,6 +32,11 @@ export class CrawlerService {
   private readonly logger = new Logger(CrawlerService.name);
   /** Nghỉ giữa các URL của cùng một nguồn. */
   urlDelayMs = 500;
+  private notifying: Promise<{
+    sent: number;
+    failed: number;
+    skipped: boolean;
+  }> | null = null;
 
   constructor(
     @InjectRepository(Event)
@@ -54,6 +59,26 @@ export class CrawlerService {
    * gửi lỗi thì event vẫn chờ để lần sau gửi lại. Event chưa rõ ngày đăng không được gửi.
    */
   async notifyPendingEvents(pauseMs = 800) {
+    // Chống chạy chồng: cron và lần cào bấm tay dùng chung một lượt gửi, không gửi trùng.
+    if (this.notifying) return this.notifying;
+    this.notifying = this.sendPending(pauseMs).finally(() => {
+      this.notifying = null;
+    });
+    return this.notifying;
+  }
+
+  /** Gửi thông báo ngay sau khi cào; lỗi chỉ ghi log, không làm hỏng kết quả cào. */
+  private async notifyAfterCrawl() {
+    try {
+      await this.notifyPendingEvents();
+    } catch (err) {
+      this.logger.warn(
+        `Gửi Telegram sau khi cào lỗi: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private async sendPending(pauseMs: number) {
     const unnotifiedEvents = await this.eventRepository.find({
       where: { notifiedAt: IsNull(), dateUnknown: false },
       order: { createdAt: 'ASC' },
@@ -100,6 +125,7 @@ export class CrawlerService {
         setTimeout(resolve, 2000 + Math.random() * 1000),
       );
     }
+    await this.notifyAfterCrawl();
     return results;
   }
 
@@ -115,7 +141,9 @@ export class CrawlerService {
   }
 
   async crawlSource(source: CrawlSource) {
-    return this.crawlTarget(source);
+    const result = await this.crawlTarget(source);
+    await this.notifyAfterCrawl();
+    return result;
   }
 
   async crawlSourceById(id: string) {
@@ -124,7 +152,9 @@ export class CrawlerService {
 
   async crawlTargetById(id: string) {
     const target = await this.getCrawlerTargetById(id);
-    return this.crawlTarget(target);
+    const result = await this.crawlTarget(target);
+    await this.notifyAfterCrawl();
+    return result;
   }
 
   async crawlTarget(target: CrawlTarget) {
@@ -317,9 +347,7 @@ export class CrawlerService {
     );
   }
 
-  private async fetchItemsFromTarget(
-    target: CrawlTarget,
-  ): Promise<{
+  private async fetchItemsFromTarget(target: CrawlTarget): Promise<{
     items: ParsedCrawlItem[];
     errors: CrawlFetchError[];
     attempts: number;

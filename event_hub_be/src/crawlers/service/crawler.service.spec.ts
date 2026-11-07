@@ -133,6 +133,26 @@ describe('CrawlerService', () => {
       expect(event.notifiedAt).toBeNull();
     });
 
+    it('hai lượt gửi chạy cùng lúc không gửi trùng một event', async () => {
+      const event = pending();
+      const sendMessage = jest.fn(async () => ({ ok: true }));
+      const { service } = build({ events: [event], telegram: { sendMessage } });
+      await Promise.all([service.notifyPendingEvents(0), service.notifyPendingEvents(0)]);
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('cào xong một nguồn thì gửi Telegram ngay cho bài mới', async () => {
+      const url = 'https://shop.vn/feed';
+      const sendMessage = jest.fn(async () => ({ ok: true }));
+      const { service, eventRepo } = build({
+        items: { [url]: [promo({ eventDate: new Date('2026-11-05T01:30:00Z') })] },
+        telegram: { sendMessage },
+      });
+      await service.crawlSource(source([url]));
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(eventRepo.rows[0].notifiedAt).toBeInstanceOf(Date);
+    });
+
     it('escape HTML từ nội dung crawl và bỏ link không phải http(s)', () => {
       const msg = CrawlerService.buildTelegramMessage({ ...pending(), url: 'javascript:alert(1)' } as unknown as Event);
       expect(msg).toContain('Ưu đãi &lt;b&gt;lớn&lt;/b&gt;');
