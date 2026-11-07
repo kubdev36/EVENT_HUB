@@ -9,6 +9,8 @@ import { Observable, tap } from 'rxjs';
 import { AuditService } from './audit.service.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+/** Thao tác thành công lặp lại thường xuyên, chỉ ghi khi lỗi (vd. làm mới phiên mỗi 15 phút). */
+const LOG_FAILURE_ONLY = new Set(['POST /auth/refresh']);
 
 export type AuditRequest = {
   method: string;
@@ -39,6 +41,7 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () =>
+          !LOG_FAILURE_ONLY.has(base.action) &&
           void this.audit.record({
             ...base,
             statusCode: res.statusCode,
@@ -69,7 +72,10 @@ export class AuditInterceptor implements NestInterceptor {
       isLogin && typeof body?.email === 'string'
         ? body.email.trim().toLowerCase()
         : null;
-    const target = Object.values(req.params ?? {}).flat().join(',') || null;
+    const target =
+      Object.values(req.params ?? {})
+        .flat()
+        .join(',') || null;
     return {
       userId: req.user?.id ?? null,
       userEmail: req.user?.email ?? loginEmail,

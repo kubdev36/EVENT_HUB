@@ -4,6 +4,7 @@ import { TimestampsToTimestamptz1794100000000 } from './1794100000000-Timestamps
 import { AddEventImageStore1794200000000 } from './1794200000000-AddEventImageStore.js';
 import { EncryptTelegramToken1794300000000 } from './1794300000000-EncryptTelegramToken.js';
 import { CreateAuditLogs1794300000001 } from './1794300000001-CreateAuditLogs.js';
+import { CreateRefreshTokens1794400000000 } from './1794400000000-CreateRefreshTokens.js';
 
 /** Danh sách migration theo thứ tự. Thêm migration mới vào cuối mảng. */
 export const migrations = [
@@ -13,4 +14,5 @@ export const migrations = [
   AddEventImageStore1794200000000,
   EncryptTelegramToken1794300000000,
   CreateAuditLogs1794300000001,
+  CreateRefreshTokens1794400000000,
 ];

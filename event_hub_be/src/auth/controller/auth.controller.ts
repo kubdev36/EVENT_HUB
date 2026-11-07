@@ -9,8 +9,16 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
-import { SESSION_COOKIE, sessionCookieOptions } from '../session-cookie.js';
+import type { Request as ExpressRequest, Response } from 'express';
+import {
+  REFRESH_COOKIE,
+  refreshCookieOptions,
+  refreshTokenFromCookie,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  withoutMaxAge,
+} from '../session-cookie.js';
+import { IssuedSession, SessionService } from '../service/session.service.js';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -26,7 +34,16 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly sessions: SessionService,
+  ) {}
+
+  /** Đặt cookie access token (15 phút) và refresh token (7 ngày, chỉ gửi tới /auth). */
+  private static setSessionCookies(res: Response, s: IssuedSession) {
+    res.cookie(SESSION_COOKIE, s.accessToken, sessionCookieOptions());
+    res.cookie(REFRESH_COOKIE, s.refreshToken, refreshCookieOptions());
+  }
 
   @Post('login')
   @UseGuards(ThrottlerGuard)
@@ -45,18 +62,38 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, ...result } = await this.authService.login(loginDto);
+    const result = await this.authService.login(loginDto);
     // Token chỉ nằm trong cookie httpOnly, không trả trong nội dung để script trên trang không đọc được.
-    res.cookie(SESSION_COOKIE, accessToken, sessionCookieOptions());
+    AuthController.setSessionCookies(
+      res,
+      await this.sessions.issue(result.user),
+    );
     return result;
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đổi refresh token lấy phiên mới (xoay vòng)' })
+  async refresh(
+    @Request() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.sessions.rotate(refreshTokenFromCookie(req));
+    AuthController.setSessionCookies(res, session);
+    return { user: session.user };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout (xóa cookie phiên)' })
-  logout(@Res({ passthrough: true }) res: Response) {
-    const { maxAge: _maxAge, ...opts } = sessionCookieOptions();
-    res.clearCookie(SESSION_COOKIE, opts);
+  async logout(
+    @Request() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Thu hồi refresh token ở server, không chỉ xóa cookie.
+    await this.sessions.revoke(refreshTokenFromCookie(req));
+    res.clearCookie(SESSION_COOKIE, withoutMaxAge(sessionCookieOptions()));
+    res.clearCookie(REFRESH_COOKIE, withoutMaxAge(refreshCookieOptions()));
     return { message: 'Logged out' };
   }
 

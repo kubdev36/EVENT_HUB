@@ -2,7 +2,14 @@ import type { CookieOptions, NextFunction, Request, Response } from 'express';
 
 /** Cookie chứa JWT. HttpOnly nên script trên trang (kể cả khi bị XSS) không đọc được. */
 export const SESSION_COOKIE = 'eh_session';
-export const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // khớp expiresIn '1d' của JWT
+/** Access token ngắn hạn; khớp ACCESS_TOKEN_TTL của JWT. */
+export const ACCESS_TOKEN_TTL = '15m';
+export const SESSION_MAX_AGE_MS = 15 * 60 * 1000;
+
+/** Refresh token: cookie riêng, chỉ gửi tới /auth (refresh, logout). */
+export const REFRESH_COOKIE = 'eh_refresh';
+export const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const REFRESH_COOKIE_PATH = '/auth';
 
 export function sessionCookieOptions(
   production = process.env.NODE_ENV === 'production',
@@ -15,6 +22,31 @@ export function sessionCookieOptions(
     path: '/',
     maxAge: SESSION_MAX_AGE_MS,
   };
+}
+
+export function refreshCookieOptions(
+  production = process.env.NODE_ENV === 'production',
+): CookieOptions {
+  return {
+    ...sessionCookieOptions(production),
+    path: REFRESH_COOKIE_PATH,
+    maxAge: REFRESH_MAX_AGE_MS,
+  };
+}
+
+/** Tùy chọn để xóa cookie: giống lúc đặt nhưng bỏ maxAge (clearCookie không nhận maxAge). */
+export function withoutMaxAge(opts: CookieOptions): CookieOptions {
+  const { maxAge: _maxAge, ...rest } = opts;
+  return rest;
+}
+
+export function refreshTokenFromCookie(
+  req: Request | undefined,
+): string | null {
+  const value = (req?.cookies as Record<string, unknown> | undefined)?.[
+    REFRESH_COOKIE
+  ];
+  return typeof value === 'string' && value ? value : null;
 }
 
 /** Đọc JWT từ cookie phiên; dùng làm extractor cho passport-jwt. */

@@ -1,6 +1,10 @@
-import { BadRequestException, Injectable, UnauthorizedException, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
@@ -13,7 +17,6 @@ export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly jwtService: JwtService,
     private readonly configService: ConfigService, // Inject ConfigService để đọc biến môi trường
   ) {}
 
@@ -25,7 +28,9 @@ export class AuthService implements OnModuleInit {
     if (!adminEmail || !adminPassword) return;
 
     const email = adminEmail.trim().toLowerCase();
-    const existingAdmin = await this.userRepository.findOne({ where: { email } });
+    const existingAdmin = await this.userRepository.findOne({
+      where: { email },
+    });
 
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
@@ -59,12 +64,9 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Email or password is incorrect.');
     }
 
-    const payload = { sub: user.id, email: user.email, role: user.role, department: user.department };
-    const accessToken = await this.jwtService.signAsync(payload);
-
+    // Token do SessionService cấp (access token ngắn hạn + refresh token xoay vòng).
     return {
       message: 'Login successful',
-      accessToken,
       user: {
         id: user.id,
         email: user.email,

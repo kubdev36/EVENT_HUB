@@ -5,6 +5,7 @@ import { Event } from './events/entity/event.entity.js';
 import { CrawlerRun } from './crawlers/entity/crawler-run.entity.js';
 import { Setting } from './settings/entity/setting.entity.js';
 import { AuditLog } from './audit/audit-log.entity.js';
+import { RefreshToken } from './auth/refresh-token.entity.js';
 import { migrations } from './migrations/index.js';
 
 dotenv.config();
@@ -18,7 +19,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'event_hub',
   synchronize: false,
   logging: process.env.NODE_ENV !== 'production',
-  entities: [User, Event, CrawlerRun, Setting, AuditLog],
+  entities: [User, Event, CrawlerRun, Setting, AuditLog, RefreshToken],
   migrations,
   subscribers: [],
 });

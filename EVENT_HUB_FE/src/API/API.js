@@ -20,17 +20,37 @@ export function clearStoredAuth() {
   localStorage.removeItem('event-hub-auth');
 }
 
+/** Hết phiên hẳn: xóa thông tin đăng nhập, về trang đăng nhập (trừ khi đang ở đó, tránh tải lại vô hạn). */
+function endSession() {
+  clearStoredAuth();
+  if (window.location.pathname !== '/') window.location.href = '/';
+}
+
+// Access token sống 15 phút. Gặp 401 thì làm mới bằng refresh token (cookie httpOnly) rồi gửi lại
+// request một lần. Nhiều request cùng 401 dùng chung một lần làm mới.
+let refreshing = null;
+const AUTH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout'];
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Hết phiên: về trang đăng nhập. Bỏ qua khi đang ở trang đăng nhập để không tải lại vô hạn.
-    if (error.response?.status === 401 && window.location.pathname !== '/') {
-      clearStoredAuth();
-      window.location.href = '/';
-    } else if (error.response?.status === 401) {
-      clearStoredAuth();
+  async (error) => {
+    const original = error.config;
+    const isAuthCall = AUTH_PATHS.some((p) => original?.url?.endsWith(p));
+    if (error.response?.status !== 401 || !original || isAuthCall || original._retried) {
+      if (error.response?.status === 401 && original?._retried) endSession();
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+    original._retried = true;
+    refreshing ??= api.post('/auth/refresh').finally(() => {
+      refreshing = null;
+    });
+    try {
+      await refreshing;
+    } catch (refreshError) {
+      // Tab khác có thể vừa làm mới (token cũ không dùng lại được): cookie mới đã có, thử lại một lần.
+      if (refreshError.response?.status !== 401) return Promise.reject(error);
+    }
+    return api(original);
   },
 );
 

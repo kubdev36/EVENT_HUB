@@ -18,6 +18,7 @@ import { JwtStrategy } from './auth/jwt.strategy.js';
 import { AuthService } from './auth/service/auth.service.js';
 import {
   createCsrfMiddleware,
+  REFRESH_COOKIE,
   requireCsrfHeader,
   SESSION_COOKIE,
 } from './auth/session-cookie.js';
@@ -33,6 +34,49 @@ import { ImagesController } from './images/images.controller.js';
 import { SettingsService } from './settings/service/settings.service.js';
 import { TelegramService } from './telegram/telegram.service.js';
 import { User } from './users/entity/user.entity.js';
+import { RefreshToken } from './auth/refresh-token.entity.js';
+import { SessionService } from './auth/service/session.service.js';
+
+type Row = Record<string, unknown>;
+/** Repository refresh_tokens giả trong bộ nhớ: đủ cho insert/findOne/update/delete của SessionService. */
+function memoryTokenRepo() {
+  const rows: Row[] = [];
+  const op = (v: unknown) =>
+    v && typeof v === 'object' && '_type' in v
+      ? (v as { _type: string; _value: unknown })
+      : null;
+  const matches = (row: Row, where: Row) =>
+    Object.entries(where).every(([k, v]) => {
+      const o = op(v);
+      if (o?._type === 'isNull') return row[k] == null;
+      if (o?._type === 'lessThan') return (row[k] as Date) < (o._value as Date);
+      return row[k] === v;
+    });
+  return {
+    rows,
+    insert: async (r: Row) => {
+      rows.push({ id: `t${rows.length + 1}`, createdAt: new Date(), ...r });
+    },
+    findOne: async ({ where }: { where: Row }) =>
+      rows.find((r) => matches(r, where)) ?? null,
+    update: async (where: Row, patch: Row) => {
+      const hit = rows.filter((r) => matches(r, where));
+      hit.forEach((r) => Object.assign(r, patch));
+      return { affected: hit.length };
+    },
+    delete: async (where: Row) => {
+      for (let i = rows.length - 1; i >= 0; i--)
+        if (matches(rows[i], where)) rows.splice(i, 1);
+    },
+  };
+}
+const cookiesOf = (res: { headers: Record<string, unknown> }) =>
+  ([] as string[]).concat((res.headers['set-cookie'] as string[]) ?? []);
+const cookieValue = (cookies: string[], name: string) =>
+  cookies
+    .find((c) => c.startsWith(`${name}=`))
+    ?.split(';')[0]
+    .slice(name.length + 1) ?? '';
 
 const SECRET = 'x'.repeat(40); // khóa JWT giả cho test
 const KEY_B64 = Buffer.alloc(32, 7).toString('base64');
@@ -41,6 +85,7 @@ describe('Cookie phiên httpOnly, CSRF và ảnh cần đăng nhập', () => {
   let app: INestApplication;
   let jwt: JwtService;
   const user = { id: 'u1', email: 'a@b.vn', role: 'admin', isActive: true };
+  const tokenRepo = memoryTokenRepo();
 
   beforeAll(async () => {
     const storage = {
@@ -66,16 +111,16 @@ describe('Cookie phiên httpOnly, CSRF và ảnh cần đăng nhập', () => {
           useValue: { findOne: async () => user },
         },
         { provide: ImageStorage, useValue: storage },
+        SessionService,
+        { provide: getRepositoryToken(RefreshToken), useValue: tokenRepo },
         {
           provide: AuthService,
-          useFactory: (j: JwtService) => ({
+          useValue: {
             login: async () => ({
               message: 'Login successful',
-              accessToken: await j.signAsync({ sub: user.id }),
               user: { id: user.id, email: user.email, role: user.role },
             }),
-          }),
-          inject: [JwtService],
+          },
         },
       ],
     }).compile();
@@ -95,10 +140,63 @@ describe('Cookie phiên httpOnly, CSRF và ảnh cần đăng nhập', () => {
       .expect(200);
     expect(res.body.accessToken).toBeUndefined();
     expect(JSON.stringify(res.body)).not.toMatch(/eyJ/);
-    const cookie = ([] as string[]).concat(res.headers['set-cookie'] ?? [])[0];
-    expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
-    expect(cookie).toMatch(/HttpOnly/i);
-    expect(cookie).toMatch(/SameSite=Strict/i);
+    const cookies = cookiesOf(res);
+    const access = cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`))!;
+    const refresh = cookies.find((c) => c.startsWith(`${REFRESH_COOKIE}=`))!;
+    expect(access).toMatch(/HttpOnly/i);
+    expect(access).toMatch(/SameSite=Strict/i);
+    expect(access).toMatch(/Max-Age=900;/);
+    expect(refresh).toMatch(/HttpOnly/i);
+    expect(refresh).toMatch(/Path=\/auth;/);
+    expect(refresh).toMatch(/Max-Age=604800;/);
+    // Chỉ lưu mã băm của refresh token trong DB.
+    const raw = cookieValue(cookies, REFRESH_COOKIE);
+    expect(raw).toBeTruthy();
+    expect(JSON.stringify(tokenRepo.rows)).not.toContain(raw);
+  });
+
+  it('header Bearer không còn được chấp nhận', async () => {
+    const token = await jwt.signAsync({ sub: user.id });
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+  });
+
+  it('/auth/refresh cấp cặp token mới; token cũ không dùng lại được', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ email: 'a@b.vn', password: 'x' })
+      .expect(200);
+    const oldRefresh = cookieValue(cookiesOf(login), REFRESH_COOKIE);
+    const res = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', `${REFRESH_COOKIE}=${oldRefresh}`)
+      .expect(200);
+    expect(res.body.user.email).toBe(user.email);
+    const newRefresh = cookieValue(cookiesOf(res), REFRESH_COOKIE);
+    expect(newRefresh).toBeTruthy();
+    expect(newRefresh).not.toBe(oldRefresh);
+    // Dùng lại token cũ ngay (trong khoảng chờ hai tab): 401 nhưng không thu hồi phiên.
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', `${REFRESH_COOKIE}=${oldRefresh}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', `${REFRESH_COOKIE}=${newRefresh}`)
+      .expect(200);
+  });
+
+  it('không có refresh cookie thì 401', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .expect(401);
   });
 
   it('request ghi dữ liệu thiếu X-Requested-With bị chặn 403 (CSRF)', async () => {
@@ -115,14 +213,28 @@ describe('Cookie phiên httpOnly, CSRF và ảnh cần đăng nhập', () => {
     expect(res.body.user.email).toBe(user.email);
   });
 
-  it('logout xóa cookie phiên', async () => {
+  it('logout xóa cả hai cookie và thu hồi refresh token ở server', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ email: 'a@b.vn', password: 'x' })
+      .expect(200);
+    const refresh = cookieValue(cookiesOf(login), REFRESH_COOKIE);
     const res = await request(app.getHttpServer())
       .post('/auth/logout')
       .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', `${REFRESH_COOKIE}=${refresh}`)
       .expect(200);
-    const cookie = ([] as string[]).concat(res.headers['set-cookie'] ?? [])[0];
-    expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=;`));
-    expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/);
+    const cookies = cookiesOf(res);
+    for (const name of [SESSION_COOKIE, REFRESH_COOKIE]) {
+      const c = cookies.find((x) => x.startsWith(`${name}=;`));
+      expect(c).toMatch(/Expires=Thu, 01 Jan 1970/);
+    }
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', `${REFRESH_COOKIE}=${refresh}`)
+      .expect(401);
   });
 
   it('/images cần đăng nhập', async () => {
@@ -133,6 +245,62 @@ describe('Cookie phiên httpOnly, CSRF và ảnh cần đăng nhập', () => {
       .get(`/images/${name}`)
       .set('Cookie', `${SESSION_COOKIE}=${token}`)
       .expect(404);
+  });
+});
+
+describe('SessionService: xoay vòng và phát hiện token bị đánh cắp', () => {
+  const user = {
+    id: 'u1',
+    email: 'a@b.vn',
+    role: 'admin',
+    department: null,
+    isActive: true,
+  };
+  const build = (active = true) => {
+    const repo = memoryTokenRepo();
+    const users = { findOne: async () => ({ ...user, isActive: active }) };
+    const jwt = { signAsync: async () => 'jwt' };
+    return {
+      repo,
+      svc: new SessionService(repo as never, users as never, jwt as never),
+    };
+  };
+  const t0 = new Date('2026-11-08T08:00:00Z');
+  const later = (ms: number) => new Date(t0.getTime() + ms);
+
+  it('token đã dùng bị gửi lại sau khoảng chờ: thu hồi cả phiên', async () => {
+    const { svc, repo } = build();
+    const a = await svc.issue(user as never, undefined, t0);
+    const b = await svc.rotate(a.refreshToken, later(1000));
+    await expect(svc.rotate(a.refreshToken, later(60_000))).rejects.toThrow();
+    // Token mới cùng phiên cũng bị thu hồi.
+    await expect(svc.rotate(b.refreshToken, later(61_000))).rejects.toThrow();
+    expect(repo.rows.every((r) => r.revokedAt)).toBe(true);
+  });
+
+  it('token hết hạn bị từ chối', async () => {
+    const { svc } = build();
+    const a = await svc.issue(user as never, undefined, t0);
+    await expect(
+      svc.rotate(a.refreshToken, later(8 * 24 * 3600 * 1000)),
+    ).rejects.toThrow();
+  });
+
+  it('tài khoản bị khóa thì không làm mới được', async () => {
+    const { svc } = build(false);
+    const a = await svc.issue(user as never, undefined, t0);
+    await expect(svc.rotate(a.refreshToken, later(1000))).rejects.toThrow(
+      'không còn hoạt động',
+    );
+  });
+
+  it('revokeAllForUser (đổi mật khẩu) hủy mọi phiên', async () => {
+    const { svc } = build();
+    const a = await svc.issue(user as never, undefined, t0);
+    const b = await svc.issue(user as never, undefined, t0);
+    await svc.revokeAllForUser(user.id, later(10));
+    await expect(svc.rotate(a.refreshToken, later(20))).rejects.toThrow();
+    await expect(svc.rotate(b.refreshToken, later(20))).rejects.toThrow();
   });
 });
 

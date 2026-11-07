@@ -1,21 +1,35 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { Role } from '../../auth/enums/role.enum.js';
 import { User } from '../entity/user.entity.js';
+import { SessionService } from '../../auth/service/session.service.js';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly sessions: SessionService,
   ) {}
 
   async findAll() {
     return this.userRepository
       .createQueryBuilder('user')
-      .select(['user.id', 'user.email', 'user.role', 'user.department', 'user.isActive', 'user.createdAt', 'user.updatedAt'])
+      .select([
+        'user.id',
+        'user.email',
+        'user.role',
+        'user.department',
+        'user.isActive',
+        'user.createdAt',
+        'user.updatedAt',
+      ])
       .orderBy('user.createdAt', 'DESC')
       .getMany();
   }
@@ -28,7 +42,10 @@ export class UsersService {
       throw new BadRequestException('Email already exists.');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password || 'EventHub@2026', 10);
+    const hashedPassword = await bcrypt.hash(
+      dto.password || 'EventHub@2026',
+      10,
+    );
     const user = this.userRepository.create({
       email,
       password: hashedPassword,
@@ -51,11 +68,17 @@ export class UsersService {
       user.department = dto.department;
     }
 
-    if (dto.password && !String(dto.password).includes('•')) {
+    const passwordChanged = Boolean(
+      dto.password && !String(dto.password).includes('•'),
+    );
+    if (passwordChanged) {
       user.password = await bcrypt.hash(dto.password, 10);
     }
 
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    // Đổi mật khẩu thì đăng xuất mọi phiên đang mở của tài khoản đó.
+    if (passwordChanged) await this.sessions.revokeAllForUser(user.id);
+    return saved;
   }
 
   async resetPassword(id: string) {
@@ -64,6 +87,7 @@ export class UsersService {
 
     user.password = await bcrypt.hash('EventHub@2026', 10);
     await this.userRepository.save(user);
+    await this.sessions.revokeAllForUser(user.id);
 
     return { message: 'Password reset successfully to EventHub@2026' };
   }

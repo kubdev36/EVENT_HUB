@@ -15,11 +15,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly userRepository: Repository<User>,
   ) {
     super({
-      // Ưu tiên cookie httpOnly. Header Bearer chỉ giữ trong giai đoạn chuyển đổi (công cụ, phiên cũ).
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        tokenFromCookie,
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ]),
+      // Chỉ nhận token trong cookie httpOnly; không nhận header Bearer.
+      jwtFromRequest: ExtractJwt.fromExtractors([tokenFromCookie]),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt_token'),
     });
