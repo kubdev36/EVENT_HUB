@@ -190,6 +190,7 @@ export default function Setting() {
         ...(c.api ? { api: c.api } : {}),
         ...(c.ajaxEndpoint ? { ajaxEndpoint: c.ajaxEndpoint } : {}),
         ...(c.ajaxPayload ? { ajaxPayload: c.ajaxPayload } : {}),
+        ...(c.minRequestIntervalMs !== undefined ? { minRequestIntervalMs: c.minRequestIntervalMs } : {}),
       }));
       await settingsApi.saveCrawlers({ targets: cleanTargets });
       setStatusMessage('Đã lưu cấu hình Crawler thành công.');

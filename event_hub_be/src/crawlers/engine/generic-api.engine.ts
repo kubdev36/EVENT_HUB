@@ -98,7 +98,7 @@ export class GenericApiEngine {
             }
           `;
 
-          this.httpClient.countRequest();
+          await this.httpClient.waitForSlot(SFORUM_GQL);
           const gqlResp = await fetch(SFORUM_GQL, {
             method: 'POST',
             headers: gqlHeaders,
@@ -135,7 +135,6 @@ export class GenericApiEngine {
           );
 
           if (meta && meta.current_page >= meta.total_pages) break;
-          await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           if (err instanceof CrawlFetchError) throw err;
           const reason = err instanceof Error ? err.message : String(err);
@@ -277,8 +276,6 @@ export class GenericApiEngine {
           rawData: { sourceUrl: baseUrl, kind: 'ajax' },
         });
       });
-
-      await new Promise((r) => setTimeout(r, 400));
     }
 
     return items;

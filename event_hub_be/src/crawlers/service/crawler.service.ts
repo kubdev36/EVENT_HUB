@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Repository } from 'typeorm';
 import { ClassifierService } from '../../classifier/classifier.service.js';
 import { Event } from '../../events/entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
@@ -24,15 +24,55 @@ import { ArticleDetailHelper } from '../helpers/article-detail.helper.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
+import { isDue, mapWithConcurrency } from '../helpers/schedule.helper.js';
+import { CrawlLockService } from './crawl-lock.service.js';
 
 /** Event có ngày đăng trước mốc này bị bỏ qua (dữ liệu cũ). */
 const MIN_EVENT_DATE = new Date('2025-01-01T00:00:00+07:00');
+/** Số nguồn cào cùng lúc. Request tới cùng domain vẫn xếp hàng trong CrawlerHttpClient. */
+const MAX_PARALLEL_SOURCES = 4;
+/** Lượt cào ở trạng thái running lâu hơn mức này coi như đã chết giữa chừng. */
+const STALE_RUN_MS = 30 * 60 * 1000;
+/** Số trang chi tiết mặc định mỗi lần cào một nguồn. */
+const DEFAULT_DETAIL_BUDGET = 10;
+const WRITE_CHUNK = 100;
+
+export type CrawlResult = {
+  sourceId: string;
+  sourceName: string;
+  type: string;
+  itemsFound: number;
+  newItems: number;
+  status: CrawlerRunStatus | 'skipped';
+  errorMessage?: string;
+};
+
+/** Các cột crawler được phép cập nhật trên event đã có. */
+type EventPatch = Partial<
+  Pick<
+    Event,
+    | 'title'
+    | 'description'
+    | 'image'
+    | 'eventDate'
+    | 'eventTime'
+    | 'dateUnknown'
+    | 'externalId'
+    | 'type'
+  >
+>;
+
+type PreparedItem = {
+  item: ParsedCrawlItem;
+  type: string;
+  contentHash: string;
+  externalId: string | null;
+  existing: Event | null;
+};
 
 @Injectable()
-export class CrawlerService {
+export class CrawlerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CrawlerService.name);
-  /** Nghỉ giữa các URL của cùng một nguồn. */
-  urlDelayMs = 500;
   private notifying: Promise<{
     sent: number;
     failed: number;
@@ -53,7 +93,37 @@ export class CrawlerService {
     private readonly htmlEngine: GenericHtmlEngine,
     private readonly metaAdsEngine: GenericMetaAdsEngine,
     private readonly httpClient: CrawlerHttpClient,
+    private readonly lockService: CrawlLockService,
   ) {}
+
+  /** Khởi động lại sau khi process chết: dọn các lượt cào bị kẹt ở running. */
+  async onApplicationBootstrap() {
+    await this.failStaleRuns().catch((err: unknown) =>
+      this.logger.warn(`Không dọn được lượt cào bị kẹt: ${String(err)}`),
+    );
+  }
+
+  /** Chuyển các lượt running quá STALE_RUN_MS thành failed. */
+  async failStaleRuns(now = new Date()): Promise<number> {
+    const result = await this.crawlerRunRepository.update(
+      {
+        status: 'running',
+        startedAt: LessThan(new Date(now.getTime() - STALE_RUN_MS)),
+      },
+      {
+        status: 'failed',
+        finishedAt: now,
+        errorMessage:
+          'Bị gián đoạn: tiến trình dừng giữa chừng (vd. backend khởi động lại)',
+      },
+    );
+    if (result.affected) {
+      this.logger.warn(
+        `Đã đánh dấu ${result.affected} lượt cào bị kẹt là failed`,
+      );
+    }
+    return result.affected ?? 0;
+  }
 
   /**
    * Gửi Telegram cho event chưa thông báo. Chỉ gán notifiedAt khi Telegram xác nhận gửi thành công;
@@ -113,21 +183,53 @@ export class CrawlerService {
     return summary;
   }
 
-  async crawlAllTargets() {
+  /** Bấm "Cào tất cả": cào mọi nguồn đang bật, không xét hạn. */
+  async crawlAllTargets(): Promise<CrawlResult[]> {
     const targets = (await this.getCrawlerTargets()).filter(
       (target) => target.enabled !== false,
     );
-    const results = [];
-    for (const target of targets) {
-      const res = await this.crawlTargetSafely(target);
-      results.push(res);
-      // Gentle delay between targets (2-3s) to prevent IP rate-limiting & WAF flags
-      await new Promise((resolve) =>
-        setTimeout(resolve, 2000 + Math.random() * 1000),
-      );
-    }
+    return this.crawlMany(targets);
+  }
+
+  /** Cron: chỉ cào nguồn đang bật và đã đến hạn theo interval. */
+  async crawlDueTargets(now = new Date()): Promise<CrawlResult[]> {
+    await this.failStaleRuns(now);
+    const targets = (await this.getCrawlerTargets()).filter(
+      (target) => target.enabled !== false,
+    );
+    const lastRuns = await this.getLastRunStarts(targets.map((t) => t.id));
+    const due = targets.filter((t) =>
+      isDue(t.interval, lastRuns.get(t.id), now),
+    );
+    if (due.length === 0) return [];
+    this.logger.log(
+      `Cào ${due.length}/${targets.length} nguồn đến hạn: ${due.map((t) => t.id).join(', ')}`,
+    );
+    return this.crawlMany(due);
+  }
+
+  private async crawlMany(targets: CrawlTarget[]): Promise<CrawlResult[]> {
+    const results = await mapWithConcurrency(
+      targets,
+      MAX_PARALLEL_SOURCES,
+      (t) => this.crawlTargetSafely(t),
+    );
     await this.notifyAfterCrawl();
     return results;
+  }
+
+  /** Thời điểm bắt đầu lần cào gần nhất của từng nguồn (một truy vấn). */
+  private async getLastRunStarts(ids: string[]): Promise<Map<string, Date>> {
+    if (ids.length === 0) return new Map();
+    const rows: Array<{ sourceId: string; last: Date }> =
+      await this.crawlerRunRepository
+        .createQueryBuilder('r')
+        .select('r.sourceId', 'sourceId')
+        .addSelect('MAX(r.startedAt)', 'last')
+        .where('r.sourceId IN (:...ids)', { ids })
+        .groupBy('r.sourceId')
+        .getRawMany();
+    return new Map(rows.map((r) => [r.sourceId, new Date(r.last)]));
   }
 
   async getRecentRuns(limit = 50) {
@@ -158,9 +260,28 @@ export class CrawlerService {
     return result;
   }
 
-  async crawlTarget(target: CrawlTarget) {
+  /** Cào một nguồn. Nếu nguồn đang được cào ở nơi khác thì bỏ qua (status = skipped). */
+  async crawlTarget(target: CrawlTarget): Promise<CrawlResult> {
+    const locked = await this.lockService.runExclusive(target.id, () =>
+      this.crawlTargetLocked(target),
+    );
+    if (locked.acquired) return locked.value;
+    this.logger.warn(`Bỏ qua ${target.id}: nguồn đang được cào ở nơi khác`);
+    return {
+      sourceId: target.id,
+      sourceName: target.name,
+      type: target.type || 'web',
+      itemsFound: 0,
+      newItems: 0,
+      status: 'skipped',
+      errorMessage: 'Nguồn đang được cào, bỏ qua lượt này',
+    };
+  }
+
+  private async crawlTargetLocked(target: CrawlTarget): Promise<CrawlResult> {
+    const hosts = this.applyRateLimits(target);
     const startedMs = Date.now();
-    const requestsBefore = this.httpClient.requestCount;
+    const requestsBefore = this.httpClient.requestCountFor(hosts);
     const run = await this.crawlerRunRepository.save(
       this.crawlerRunRepository.create({
         sourceId: target.id,
@@ -179,157 +300,10 @@ export class CrawlerService {
         errors,
         attempts,
       } = await this.fetchItemsFromTarget(target);
-      const rules = await this.getKeywordRules();
-      const seen = new Set<string>();
-      let newItemsCount = 0;
-      const detail = {
-        enabled: Boolean(target.extract?.fetchDetail),
-        remaining: Math.min(
-          Math.max(target.extract?.maxDetailPerRun ?? 10, 0),
-          50,
-        ),
-        delayMs: Math.max(target.extract?.detailDelayMs ?? 2000, 0),
-      };
-
-      // Filter and deduplicate within current run
-      const validItems: ParsedCrawlItem[] = [];
-      const exclude = CrawlerService.buildExcludePattern(target);
-      for (const item of rawItems) {
-        const cleanUrl = UrlNormalizerHelper.normalizeUrl(item.url);
-        if (
-          !cleanUrl ||
-          seen.has(cleanUrl) ||
-          NoiseFilterHelper.isNoiseTitle(item.title) ||
-          exclude?.test(item.title)
-        )
-          continue;
-        seen.add(cleanUrl);
-        validItems.push(item);
-      }
-
-      // Bước 1: phân loại và tìm event đã có cho từng bài.
-      const prepared: Array<{
-        item: ParsedCrawlItem;
-        type: string;
-        contentHash: string;
-        externalId: string | null;
-        existing: Event | null;
-      }> = [];
-      for (const item of validItems) {
-        const type = this.classifierService.classify(
-          item.title,
-          item.description || '',
-          rules,
-        );
-        if (!type) continue;
-        const contentHash = UrlNormalizerHelper.buildContentHash(
-          target.id,
-          item.url,
-          item.title,
-        );
-        const externalId = item.externalId ?? null;
-        const existing = await this.eventRepository.findOne({
-          where: [
-            ...(externalId ? [{ sourceId: target.id, externalId }] : []),
-            { sourceId: target.id, url: item.url },
-            { sourceId: target.id, contentHash },
-          ],
-        });
-        prepared.push({ item, type, contentHash, externalId, existing });
-      }
-
-      // Bước 2 (crawl hai bước): tải trang chi tiết để lấy ngày cho bài chưa có ngày,
-      // ưu tiên bài mới trước, sau đó mới đến bài cũ chưa rõ ngày; có giới hạn mỗi lần.
-      if (detail.enabled) {
-        const needDetail = prepared
-          .filter(
-            (p) =>
-              // Chỉ tin ngày do engine lấy từ dữ liệu có cấu trúc; ngày đoán từ tiêu đề không tính.
-              !p.item.eventDate &&
-              (!p.existing ||
-                p.existing.dateUnknown ||
-                // Ngày cũ nằm ở tương lai là ngày sai (vd. hạn khuyến mãi), cần lấy lại.
-                (p.existing.eventDate !== null &&
-                  new Date(p.existing.eventDate).getTime() >
-                    Date.now() + 86_400_000)),
-          )
-          .sort(
-            (a, b) => Number(Boolean(a.existing)) - Number(Boolean(b.existing)),
-          )
-          .slice(0, detail.remaining);
-        for (const p of needDetail) {
-          await this.enrichFromDetail(p.item, detail.delayMs);
-        }
-      }
-
-      // Bước 3: ghi DB.
-      for (const {
-        item,
-        type,
-        contentHash,
-        externalId,
-        existing,
-      } of prepared) {
-        const dateInfo = DateExtractorHelper.parseItemEventDate(item);
-
-        if (existing) {
-          existing.lastSeenAt = new Date();
-          existing.title = item.title;
-          existing.description = item.description ?? existing.description;
-          if (item.image && !NoiseFilterHelper.isNoiseImage(item.image)) {
-            existing.image = item.image;
-          }
-          // Only update eventDate if we found an explicit real date from this item
-          if (
-            dateInfo.isExplicit &&
-            dateInfo.date &&
-            !isNaN(dateInfo.date.getTime())
-          ) {
-            existing.eventDate = dateInfo.date;
-            existing.eventTime = dateInfo.time || existing.eventTime;
-            existing.dateUnknown = false;
-          }
-          if (externalId && !existing.externalId)
-            existing.externalId = externalId;
-          existing.type = type;
-          await this.eventRepository.save(existing);
-          continue;
-        }
-
-        // Không tìm được ngày đăng thì để trống và đánh dấu dateUnknown, không dùng ngày crawl.
-        const eventDate =
-          dateInfo.date && !isNaN(dateInfo.date.getTime())
-            ? dateInfo.date
-            : null;
-        if (eventDate && eventDate < MIN_EVENT_DATE) continue;
-
-        const newEvent = this.eventRepository.create({
-          sourceId: target.id,
-          sourceName: target.name,
-          origin: 'crawler',
-          sourceUrl: (item.rawData?.sourceUrl as string) || item.url,
-          title: item.title,
-          description: item.description ?? null,
-          image:
-            item.image && !NoiseFilterHelper.isNoiseImage(item.image)
-              ? item.image
-              : null,
-          url: item.url,
-          eventDate,
-          eventTime: eventDate ? dateInfo.time : null,
-          dateUnknown: !eventDate,
-          externalId,
-          type,
-          rawData: item.rawData ?? null,
-          contentHash,
-          firstSeenAt: new Date(),
-          lastSeenAt: new Date(),
-          notifiedAt: null,
-        });
-
-        await this.eventRepository.save(newEvent);
-        newItemsCount += 1;
-      }
+      const validItems = this.filterItems(target, rawItems);
+      const prepared = await this.prepareItems(target, validItems);
+      await this.enrichFromDetails(target, prepared);
+      const newItemsCount = await this.persist(target, prepared);
 
       const status = CrawlerService.resolveRunStatus(errors, attempts);
       run.status = status;
@@ -341,7 +315,7 @@ export class CrawlerService {
         : null;
       run.itemsFound = validItems.length;
       run.newItems = newItemsCount;
-      this.finishRun(run, startedMs, requestsBefore);
+      this.finishRun(run, startedMs, requestsBefore, hosts);
       await this.crawlerRunRepository.save(run);
 
       return {
@@ -357,10 +331,264 @@ export class CrawlerService {
       run.status = 'failed';
       run.errorMessage =
         error instanceof Error ? error.message : 'Unknown crawler error';
-      this.finishRun(run, startedMs, requestsBefore);
+      this.finishRun(run, startedMs, requestsBefore, hosts);
       await this.crawlerRunRepository.save(run);
       throw error;
     }
+  }
+
+  /** Các host nguồn gọi tới; đặt khoảng cách tối thiểu theo cấu hình nguồn (vd. Crawl-delay). */
+  private applyRateLimits(target: CrawlTarget): string[] {
+    const hosts = [
+      ...(target.targetUrls || []),
+      ...(target.api?.endpoint ? [target.api.endpoint] : []),
+      ...(target.ajaxEndpoint ? [target.ajaxEndpoint] : []),
+    ]
+      .filter((u) => /^https?:\/\//i.test(u?.trim() || ''))
+      .map((u) => CrawlerHttpClient.hostKey(u.trim()));
+    const unique = [...new Set(hosts)];
+    if (target.minRequestIntervalMs !== undefined) {
+      for (const h of unique)
+        this.httpClient.setHostInterval(h, target.minRequestIntervalMs);
+    }
+    return unique;
+  }
+
+  /** Bỏ bài trùng URL trong lần cào, tiêu đề nhiễu và tiêu đề khớp bộ lọc của nguồn. */
+  private filterItems(
+    target: CrawlTarget,
+    rawItems: ParsedCrawlItem[],
+  ): ParsedCrawlItem[] {
+    const seen = new Set<string>();
+    const exclude = CrawlerService.buildExcludePattern(target);
+    const valid: ParsedCrawlItem[] = [];
+    for (const item of rawItems) {
+      const cleanUrl = UrlNormalizerHelper.normalizeUrl(item.url);
+      if (
+        !cleanUrl ||
+        seen.has(cleanUrl) ||
+        NoiseFilterHelper.isNoiseTitle(item.title) ||
+        exclude?.test(item.title)
+      )
+        continue;
+      seen.add(cleanUrl);
+      valid.push(item);
+    }
+    return valid;
+  }
+
+  /** Phân loại và ghép với event đã có. Tải event của nguồn bằng một truy vấn. */
+  private async prepareItems(
+    target: CrawlTarget,
+    items: ParsedCrawlItem[],
+  ): Promise<PreparedItem[]> {
+    const rules = await this.getKeywordRules();
+    const existingRows = await this.eventRepository.find({
+      where: { sourceId: target.id },
+      // Không lấy rawData (có thể lớn).
+      select: {
+        id: true,
+        url: true,
+        contentHash: true,
+        externalId: true,
+        title: true,
+        description: true,
+        image: true,
+        eventDate: true,
+        eventTime: true,
+        dateUnknown: true,
+        type: true,
+      },
+    });
+    const byExternalId = new Map<string, Event>();
+    const byUrl = new Map<string, Event>();
+    const byHash = new Map<string, Event>();
+    for (const row of existingRows) {
+      if (row.externalId) byExternalId.set(row.externalId, row);
+      byUrl.set(row.url, row);
+      byHash.set(row.contentHash, row);
+    }
+
+    const prepared: PreparedItem[] = [];
+    for (const item of items) {
+      const type = this.classifierService.classify(
+        item.title,
+        item.description || '',
+        rules,
+      );
+      if (!type) continue;
+      const contentHash = UrlNormalizerHelper.buildContentHash(
+        target.id,
+        item.url,
+        item.title,
+      );
+      const externalId = item.externalId ?? null;
+      const existing =
+        (externalId ? byExternalId.get(externalId) : undefined) ??
+        byUrl.get(item.url) ??
+        byHash.get(contentHash) ??
+        null;
+      prepared.push({ item, type, contentHash, externalId, existing });
+    }
+    return prepared;
+  }
+
+  /**
+   * Crawl hai bước, chỉ cho bài cần: bài mới thiếu ảnh, hoặc (khi nguồn bật fetchDetail)
+   * bài chưa có ngày từ dữ liệu có cấu trúc. Ưu tiên bài mới; có giới hạn mỗi lần.
+   */
+  private async enrichFromDetails(
+    target: CrawlTarget,
+    prepared: PreparedItem[],
+  ): Promise<void> {
+    const fetchDetail = Boolean(target.extract?.fetchDetail);
+    const budget = Math.min(
+      Math.max(target.extract?.maxDetailPerRun ?? DEFAULT_DETAIL_BUDGET, 0),
+      50,
+    );
+    const delayMs = Math.max(target.extract?.detailDelayMs ?? 0, 0);
+    const now = Date.now();
+
+    const needDetail = prepared
+      .filter((p) => {
+        const needImage = !p.existing && !p.item.image;
+        // Chỉ tin ngày do engine lấy từ dữ liệu có cấu trúc; ngày đoán từ tiêu đề không tính.
+        const needDate =
+          fetchDetail &&
+          !p.item.eventDate &&
+          (!p.existing ||
+            p.existing.dateUnknown ||
+            // Ngày cũ nằm ở tương lai là ngày sai (vd. hạn khuyến mãi), cần lấy lại.
+            (p.existing.eventDate !== null &&
+              new Date(p.existing.eventDate).getTime() > now + 86_400_000));
+        return needImage || needDate;
+      })
+      .sort((a, b) => Number(Boolean(a.existing)) - Number(Boolean(b.existing)))
+      .slice(0, budget);
+
+    for (const p of needDetail) {
+      await this.enrichFromDetail(p.item, delayMs, fetchDetail);
+    }
+  }
+
+  /**
+   * Ghi DB theo lô: bài mới insert theo từng 100 dòng; bài đã có chỉ update cột thay đổi;
+   * lastSeenAt của mọi bài đã thấy cập nhật bằng một truy vấn. Trả số bài mới.
+   */
+  private async persist(
+    target: CrawlTarget,
+    prepared: PreparedItem[],
+  ): Promise<number> {
+    const now = new Date();
+    const seenIds: string[] = [];
+    const newEvents: Event[] = [];
+    const newHashes = new Set<string>();
+
+    for (const { item, type, contentHash, externalId, existing } of prepared) {
+      const dateInfo = DateExtractorHelper.parseItemEventDate(item);
+      const image =
+        item.image && !NoiseFilterHelper.isNoiseImage(item.image)
+          ? item.image
+          : null;
+
+      if (existing) {
+        seenIds.push(existing.id);
+        const patch = CrawlerService.diffExisting(existing, {
+          item,
+          type,
+          externalId,
+          image,
+          dateInfo,
+        });
+        if (Object.keys(patch).length > 0) {
+          await this.eventRepository.update(existing.id, patch);
+          Object.assign(existing, patch);
+        }
+        continue;
+      }
+
+      // Không tìm được ngày đăng thì để trống và đánh dấu dateUnknown, không dùng ngày crawl.
+      const eventDate =
+        dateInfo.date && !isNaN(dateInfo.date.getTime()) ? dateInfo.date : null;
+      if (eventDate && eventDate < MIN_EVENT_DATE) continue;
+      // Hai bài khác URL nhưng cùng contentHash trong một lần cào: chỉ giữ bài đầu.
+      if (newHashes.has(contentHash)) continue;
+      newHashes.add(contentHash);
+
+      newEvents.push(
+        this.eventRepository.create({
+          sourceId: target.id,
+          sourceName: target.name,
+          origin: 'crawler',
+          sourceUrl: (item.rawData?.sourceUrl as string) || item.url,
+          title: item.title,
+          description: item.description ?? null,
+          image,
+          url: item.url,
+          eventDate,
+          eventTime: eventDate ? dateInfo.time : null,
+          dateUnknown: !eventDate,
+          externalId,
+          type,
+          rawData: item.rawData ?? null,
+          contentHash,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          notifiedAt: null,
+        }),
+      );
+    }
+
+    if (newEvents.length > 0) {
+      await this.eventRepository.save(newEvents, { chunk: WRITE_CHUNK });
+    }
+    for (let i = 0; i < seenIds.length; i += 500) {
+      await this.eventRepository.update(
+        { id: In(seenIds.slice(i, i + 500)) },
+        { lastSeenAt: now },
+      );
+    }
+    return newEvents.length;
+  }
+
+  /** Các cột cần cập nhật cho event đã có; rỗng nếu không có gì đổi. */
+  static diffExisting(
+    existing: Event,
+    next: {
+      item: ParsedCrawlItem;
+      type: string;
+      externalId: string | null;
+      image: string | null;
+      dateInfo: { date: Date | null; time: string | null; isExplicit: boolean };
+    },
+  ): EventPatch {
+    const patch: EventPatch = {};
+    const { item, type, externalId, image, dateInfo } = next;
+    if (item.title && item.title !== existing.title) patch.title = item.title;
+    if (
+      item.description !== undefined &&
+      item.description !== null &&
+      item.description !== existing.description
+    )
+      patch.description = item.description;
+    if (image && image !== existing.image) patch.image = image;
+    // Chỉ cập nhật ngày khi tìm được ngày thật từ bài.
+    if (
+      dateInfo.isExplicit &&
+      dateInfo.date &&
+      !isNaN(dateInfo.date.getTime())
+    ) {
+      const old = existing.eventDate
+        ? new Date(existing.eventDate).getTime()
+        : null;
+      if (old !== dateInfo.date.getTime()) patch.eventDate = dateInfo.date;
+      const time = dateInfo.time || existing.eventTime;
+      if (time !== existing.eventTime) patch.eventTime = time;
+      if (existing.dateUnknown) patch.dateUnknown = false;
+    }
+    if (externalId && !existing.externalId) patch.externalId = externalId;
+    if (type !== existing.type) patch.type = type;
+    return patch;
   }
 
   /**
@@ -394,11 +622,12 @@ export class CrawlerService {
     run: CrawlerRun,
     startedMs: number,
     requestsBefore: number,
+    hosts: string[],
   ) {
     run.finishedAt = new Date();
     run.durationMs = Date.now() - startedMs;
-    run.requestCount = this.httpClient.requestCount - requestsBefore;
-    // Log JSON một dòng để đo baseline (thời gian, số request, số item theo nguồn).
+    run.requestCount = this.httpClient.requestCountFor(hosts) - requestsBefore;
+    // Log JSON một dòng để đo (thời gian, số request, số item theo nguồn).
     this.logger.log(
       JSON.stringify({
         event: 'crawl_run',
@@ -455,7 +684,7 @@ export class CrawlerService {
       );
     }
 
-    // 2. Các URL đã cấu hình
+    // 2. Các URL đã cấu hình (lần lượt; giãn cách do CrawlerHttpClient lo theo domain)
     for (let url of target.targetUrls || []) {
       url = url.trim();
       if (!url) continue;
@@ -483,20 +712,19 @@ export class CrawlerService {
           this.htmlEngine.fetchHtmlItems(targetUrl, target.extract),
         );
       }
-      if (this.urlDelayMs > 0)
-        await new Promise((r) => setTimeout(r, this.urlDelayMs));
     }
 
     return { items: allItems, errors, attempts };
   }
 
   /**
-   * Tải trang chi tiết để lấy ngày đăng và ảnh. Lỗi chỉ ghi log: bài vẫn được lưu
-   * với dateUnknown và sẽ thử lại ở lần cào sau.
+   * Tải trang chi tiết để lấy ảnh và (nếu useDate) ngày đăng. Lỗi chỉ ghi log: bài vẫn
+   * được lưu (dateUnknown nếu thiếu ngày) và sẽ thử lại ở lần cào sau.
    */
   private async enrichFromDetail(
     item: ParsedCrawlItem,
     delayMs: number,
+    useDate: boolean,
   ): Promise<boolean> {
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     const page = await this.httpClient.fetchPage(item.url);
@@ -508,13 +736,13 @@ export class CrawlerService {
     }
     const detail = ArticleDetailHelper.parse(page.html, page.url);
     if (!item.image && detail.image) item.image = detail.image;
-    if (!detail.published) return false;
+    if (!useDate || item.eventDate || !detail.published) return false;
     item.eventDate = detail.published.date;
     item.eventTime = detail.published.time;
     return true;
   }
 
-  private async crawlTargetSafely(target: CrawlTarget) {
+  private async crawlTargetSafely(target: CrawlTarget): Promise<CrawlResult> {
     try {
       return await this.crawlTarget(target);
     } catch (error) {

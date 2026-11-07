@@ -237,6 +237,27 @@ Chưa làm: đo baseline trên nguồn thật (cần chạy crawl thật).
 
 Còn lại: người dùng tự đổi mật khẩu admin `123456`; đặt `JWT_SECRET`, `DB_PASSWORD` mới khi triển khai; quét lịch sử git bằng `gitleaks`; bật trust proxy khi chạy sau reverse proxy.
 
+### Tiến độ giai đoạn 3 (07/11/2026)
+
+Đã làm, có test:
+
+- Chống chạy chồng: Postgres advisory lock theo nguồn (`CrawlLockService`); lượt trùng trả `skipped`.
+- Lượt `running` quá 30 phút chuyển thành `failed` khi khởi động và trước mỗi lượt cron.
+- Cron 15 phút chỉ cào nguồn đến hạn theo `interval` (mặc định 6h, tối thiểu 15 phút); "Cào tất cả" vẫn cào ngay.
+- Tối đa 4 nguồn song song; giãn cách theo domain trong `CrawlerHttpClient` (mặc định 500 ms, `minRequestIntervalMs` theo nguồn, Thế giới di động 5000 ms). Bỏ nghỉ cố định giữa nguồn và giữa URL.
+- Bỏ tải ảnh cho mọi bài RSS; chỉ bài mới thiếu ảnh được tải trang chi tiết, trong giới hạn 10 trang mỗi lần.
+- Ghi DB theo lô: một truy vấn tải event của nguồn, insert từng 100 dòng, chỉ update cột thay đổi, `lastSeenAt` cập nhật một lệnh.
+
+Số đo một lần chạy thật (4 nguồn, chỉ link web), là số đo đơn lẻ, chưa phải trung bình:
+
+| | Baseline sáng 07/11 (tuần tự) | Sau giai đoạn 3 (song song) |
+| --- | --- | --- |
+| Tổng thời gian | khoảng 95 giây (tổng 4 nguồn + nghỉ 2–3 giây giữa nguồn) | 5,7 giây; lượt hai 9,8 giây |
+| Request CellphoneS | 11 (cron cũ có lượt 103 do tải ảnh RSS) | 9 |
+| Request Hoàng Hà / FPT Shop / Thế giới di động | 4 / 4 / 1 | 4 / 4–6 / 2 |
+
+Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễn tập rollback và khôi phục DB (cần môi trường triển khai).
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

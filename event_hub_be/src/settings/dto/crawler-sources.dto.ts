@@ -174,6 +174,13 @@ export class CrawlerSourceItemDto {
   @ValidateNested()
   @Type(() => ApiSourceConfigDto)
   api?: ApiSourceConfigDto;
+
+  @ApiProperty({ required: false, example: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  minRequestIntervalMs?: number;
 }
 
 export class SaveCrawlerSourcesDto {

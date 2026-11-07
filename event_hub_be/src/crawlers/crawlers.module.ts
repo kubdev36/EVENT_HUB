@@ -10,6 +10,7 @@ import { TelegramService } from '../telegram/telegram.service.js';
 import { CrawlerController } from './controller/crawler.controller.js';
 import { CrawlerCronService } from './crawler-cron.service.js';
 import { CrawlerService } from './service/crawler.service.js';
+import { CrawlLockService } from './service/crawl-lock.service.js';
 import { CrawlerHttpClient } from './engine/crawler-http.client.js';
 import { GenericRssEngine } from './engine/generic-rss.engine.js';
 import { GenericApiEngine } from './engine/generic-api.engine.js';
@@ -17,10 +18,15 @@ import { GenericHtmlEngine } from './engine/generic-html.engine.js';
 import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Event, CrawlerRun, Setting]), AuthModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    TypeOrmModule.forFeature([Event, CrawlerRun, Setting]),
+    AuthModule,
+  ],
   controllers: [CrawlerController],
   providers: [
     CrawlerService,
+    CrawlLockService,
     CrawlerCronService,
     ClassifierService,
     TelegramService,

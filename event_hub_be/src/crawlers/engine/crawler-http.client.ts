@@ -37,8 +37,60 @@ const BLOCK_MARKERS = [
 export class CrawlerHttpClient {
   private readonly logger = new Logger(CrawlerHttpClient.name);
   private requests = 0;
+  /** Số request theo host, để đo đúng từng nguồn khi nhiều nguồn chạy song song. */
+  private readonly hostRequests = new Map<string, number>();
+  /** Hàng đợi theo host: request tới cùng host chạy lần lượt, cách nhau ít nhất N ms. */
+  private readonly hostQueues = new Map<string, Promise<void>>();
+  private readonly hostIntervals = new Map<string, number>();
+  /** Khoảng cách mặc định giữa hai request tới cùng một host. */
+  defaultHostIntervalMs = 500;
   /** Phân giải DNS; thay được trong test. */
   resolveHost?: HostResolver;
+
+  /** Đặt khoảng cách tối thiểu cho một host (vd. Crawl-delay của robots.txt). */
+  setHostInterval(host: string, ms: number): void {
+    this.hostIntervals.set(CrawlerHttpClient.hostKey(host), Math.max(0, ms));
+  }
+
+  /** Tổng số request đã gửi tới các host này từ khi khởi động. */
+  requestCountFor(hosts: string[]): number {
+    return [...new Set(hosts.map(CrawlerHttpClient.hostKey))].reduce(
+      (sum, h) => sum + (this.hostRequests.get(h) ?? 0),
+      0,
+    );
+  }
+
+  static hostKey(hostOrUrl: string): string {
+    let host = hostOrUrl;
+    try {
+      if (/^https?:\/\//i.test(hostOrUrl)) host = new URL(hostOrUrl).hostname;
+    } catch {
+      // không phải URL: dùng nguyên chuỗi làm host
+      host = hostOrUrl;
+    }
+    return host.toLowerCase().replace(/^www\./, '');
+  }
+
+  /**
+   * Chờ đến lượt gửi request tới host của url. Mọi request (trang, AJAX, API, trang chi tiết)
+   * đều đi qua đây, nên giới hạn vẫn đúng khi nhiều nguồn chạy song song.
+   */
+  async waitForSlot(url: string): Promise<void> {
+    const host = CrawlerHttpClient.hostKey(url);
+    const interval = this.hostIntervals.get(host) ?? this.defaultHostIntervalMs;
+    const prev = this.hostQueues.get(host) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((r) => (release = r));
+    this.hostQueues.set(
+      host,
+      prev.then(() => mine),
+    );
+    await prev;
+    this.requests += 1;
+    this.hostRequests.set(host, (this.hostRequests.get(host) ?? 0) + 1);
+    // Giữ hàng đợi thêm interval ms rồi mới cho request kế tiếp tới cùng host.
+    setTimeout(release, interval);
+  }
 
   private readonly userAgents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -49,11 +101,6 @@ export class CrawlerHttpClient {
   /** Tổng số request đã gửi từ khi khởi động; lấy hiệu hai lần đọc để đo một lần crawl. */
   get requestCount(): number {
     return this.requests;
-  }
-
-  /** Ghi nhận một request gửi bằng fetch trực tiếp ngoài client này (vd. GraphQL). */
-  countRequest(): void {
-    this.requests += 1;
   }
 
   /** Trả null khi không lấy được trang; dùng cho việc phụ như lấy ảnh. */
@@ -154,7 +201,7 @@ export class CrawlerHttpClient {
     let current = startUrl;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       await assertPublicHttpUrl(current, this.resolveHost);
-      this.requests += 1;
+      await this.waitForSlot(current);
       const resp = await fetch(current, {
         headers: this.buildHeaders(current),
         redirect: 'manual',
@@ -185,6 +232,7 @@ export class CrawlerHttpClient {
       this.logger.warn((err as Error).message);
       return null;
     }
+    await this.waitForSlot(url);
     return new Promise((resolve) => {
       let parsed: URL;
       try {
@@ -207,7 +255,6 @@ export class CrawlerHttpClient {
         ...headers,
       };
 
-      this.requests += 1;
       const request = transport.request(
         {
           hostname: parsed.hostname,

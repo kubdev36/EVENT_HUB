@@ -15,13 +15,38 @@ function memoryRepo(rows: Row[] = []) {
         ? row[k] == null
         : row[k] === v,
     );
+  const saveOne = (row: Row) => {
+    if (!row.id) row.id = `id-${rows.length + 1}`;
+    if (!rows.includes(row)) rows.push(row);
+    return row;
+  };
+  /** criteria: id, { id: In([...]) }, hoặc điều kiện đơn giản. */
+  const select = (criteria: unknown): Row[] => {
+    if (typeof criteria === 'string')
+      return rows.filter((r) => r.id === criteria);
+    const c = criteria as Row;
+    const idOp = c.id as { _value?: unknown[] } | undefined;
+    if (idOp && Array.isArray(idOp._value))
+      return rows.filter((r) => idOp._value!.includes(r.id));
+    return rows.filter((r) =>
+      Object.entries(c).every(([k, v]) => {
+        const op = v as { _type?: string; _value?: unknown } | null;
+        if (op && typeof op === 'object' && op._type === 'lessThan')
+          return (r[k] as Date) < (op._value as Date);
+        return r[k] === v;
+      }),
+    );
+  };
   return {
     rows,
     create: (data: Row) => ({ ...data }),
-    save: jest.fn(async (row: Row) => {
-      if (!row.id) row.id = `id-${rows.length + 1}`;
-      if (!rows.includes(row)) rows.push(row);
-      return row;
+    save: jest.fn(async (row: Row | Row[]) =>
+      Array.isArray(row) ? row.map(saveOne) : saveOne(row),
+    ),
+    update: jest.fn(async (criteria: unknown, patch: Row) => {
+      const hit = select(criteria);
+      hit.forEach((r) => Object.assign(r, patch));
+      return { affected: hit.length };
     }),
     findOne: async ({ where }: { where: Row | Row[] }) =>
       rows.find((r) =>
@@ -56,12 +81,26 @@ function build(opts: {
     sendPhoto: opts.telegram?.sendPhoto ?? jest.fn(async () => ({ ok: true })),
   };
   const httpClient = {
-    requestCount: 0,
+    requestCountFor: () => 0,
+    setHostInterval: jest.fn(),
     fetchPage: jest.fn(async (url: string) => {
       const html = opts.detailPages?.[url];
       return html
         ? { kind: 'ok', url, html }
         : { kind: 'failed', url, reason: 'HTTP 404' };
+    }),
+  };
+  // Khóa giả trong bộ nhớ, cùng hành vi với CrawlLockService: nguồn đang chạy thì bỏ qua.
+  const held = new Set<string>();
+  const lock = {
+    runExclusive: jest.fn(async (key: string, fn: () => Promise<unknown>) => {
+      if (held.has(key)) return { acquired: false };
+      held.add(key);
+      try {
+        return { acquired: true, value: await fn() };
+      } finally {
+        held.delete(key);
+      }
     }),
   };
   const service = new CrawlerService(
@@ -75,9 +114,9 @@ function build(opts: {
     engine as never,
     engine as never,
     httpClient as never,
+    lock as never,
   );
-  service.urlDelayMs = 0;
-  return { service, eventRepo, runRepo, telegram, httpClient };
+  return { service, eventRepo, runRepo, telegram, httpClient, lock };
 }
 
 const promo = (over: Partial<ParsedCrawlItem> = {}): ParsedCrawlItem => ({
@@ -426,10 +465,144 @@ describe('CrawlerService', () => {
       ]);
     });
 
-    it('nguồn không bật fetchDetail thì không tải trang chi tiết', async () => {
-      const { service, httpClient } = build({ items: { [list]: [promo()] } });
+    it('nguồn không bật fetchDetail và bài đã có ảnh thì không tải trang chi tiết', async () => {
+      const { service, httpClient } = build({
+        items: { [list]: [promo({ image: 'https://cdn.shop.vn/x.jpg' })] },
+      });
       await service.crawlTarget(source([list]));
       expect(httpClient.fetchPage).not.toHaveBeenCalled();
+    });
+
+    it('bài mới thiếu ảnh: tải trang chi tiết lấy ảnh, nhưng không lấy ngày nếu nguồn không bật fetchDetail', async () => {
+      const url = 'https://shop.vn/khuyen-mai/iphone-17';
+      const { service, eventRepo } = build({
+        items: { [list]: [promo({ url })] },
+        detailPages: { [url]: articleHtml('2026-11-04T04:03:01+00:00') },
+      });
+      await service.crawlTarget(source([list]));
+      expect(eventRepo.rows[0]).toMatchObject({
+        image: 'https://cdn.shop.vn/a.jpg',
+        dateUnknown: true,
+      });
+    });
+
+    it('bài đã có trong DB thì không tải lại trang chi tiết để lấy ảnh (thay cho việc tải ảnh mỗi lần cào RSS)', async () => {
+      const url = 'https://shop.vn/khuyen-mai/iphone-17';
+      const old = {
+        id: 'e1',
+        sourceId: 'shop',
+        url,
+        title: 'x',
+        dateUnknown: false,
+        image: null,
+      };
+      const { service, httpClient } = build({
+        events: [old],
+        items: { [list]: [promo({ url })] },
+      });
+      await service.crawlTarget(source([list]));
+      expect(httpClient.fetchPage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ghi DB theo lô', () => {
+    const list = 'https://shop.vn/feed';
+
+    it('cào lại lần hai không tạo trùng và không ghi lại bài không đổi', async () => {
+      const items = [1, 2, 3].map((n) =>
+        promo({
+          url: `https://shop.vn/tin-tuc/km-${n}`,
+          title: `Khuyến mãi giảm giá đợt ${n}`,
+          image: 'https://cdn.shop.vn/a.jpg',
+          eventDate: new Date('2026-11-05T01:30:00Z'),
+        }),
+      );
+      const { service, eventRepo } = build({ items: { [list]: items } });
+      const first = await service.crawlTarget(source([list]));
+      expect(first.newItems).toBe(3);
+
+      eventRepo.update.mockClear();
+      eventRepo.save.mockClear();
+      const second = await service.crawlTarget(source([list]));
+      expect(second.newItems).toBe(0);
+      expect(eventRepo.rows).toHaveLength(3);
+      // Chỉ một lệnh cập nhật lastSeenAt cho cả lô, không update từng bài.
+      expect(eventRepo.update).toHaveBeenCalledTimes(1);
+      expect(eventRepo.save).not.toHaveBeenCalledWith(
+        expect.arrayContaining([expect.anything()]),
+        expect.anything(),
+      );
+    });
+
+    it('chỉ update cột thay đổi', async () => {
+      const url = 'https://shop.vn/tin-tuc/km-1';
+      const old = {
+        id: 'e1',
+        sourceId: 'shop',
+        url,
+        title: 'Tiêu đề cũ khuyến mãi',
+        type: 'promo',
+        dateUnknown: false,
+        image: 'https://cdn.shop.vn/a.jpg',
+        externalId: null,
+        eventTime: null,
+        eventDate: null,
+      };
+      const { service, eventRepo } = build({
+        events: [old],
+        items: {
+          [list]: [
+            promo({
+              url,
+              title: 'Khuyến mãi giảm giá tiêu đề mới',
+              image: 'https://cdn.shop.vn/a.jpg',
+            }),
+          ],
+        },
+      });
+      await service.crawlTarget(source([list]));
+      expect(eventRepo.update).toHaveBeenCalledWith('e1', {
+        title: 'Khuyến mãi giảm giá tiêu đề mới',
+      });
+    });
+  });
+
+  describe('chống chạy chồng và lượt bị kẹt', () => {
+    const list = 'https://shop.vn/feed';
+
+    it('hai lượt cào cùng nguồn chạy cùng lúc: lượt sau bị bỏ qua, không tạo trùng', async () => {
+      const { service, eventRepo, runRepo } = build({
+        items: { [list]: [promo()] },
+      });
+      const [a, b] = await Promise.all([
+        service.crawlTarget(source([list])),
+        service.crawlTarget(source([list])),
+      ]);
+      expect([a.status, b.status].sort()).toEqual(['skipped', 'success']);
+      expect(eventRepo.rows).toHaveLength(1);
+      expect(runRepo.rows).toHaveLength(1);
+    });
+
+    it('lượt running quá 30 phút bị chuyển thành failed', async () => {
+      const now = new Date('2026-11-07T10:00:00Z');
+      const { service, runRepo } = build({});
+      runRepo.rows.push(
+        {
+          id: 'old',
+          status: 'running',
+          startedAt: new Date('2026-11-07T09:00:00Z'),
+        },
+        {
+          id: 'fresh',
+          status: 'running',
+          startedAt: new Date('2026-11-07T09:50:00Z'),
+        },
+      );
+      await expect(service.failStaleRuns(now)).resolves.toBe(1);
+      expect(runRepo.rows.find((r) => r.id === 'old')?.status).toBe('failed');
+      expect(runRepo.rows.find((r) => r.id === 'fresh')?.status).toBe(
+        'running',
+      );
     });
   });
 
