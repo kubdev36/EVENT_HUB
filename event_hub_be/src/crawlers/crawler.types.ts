@@ -19,6 +19,8 @@ export type CrawlSource = {
   extract?: ExtractConfig;
   /** Nguồn lấy qua API riêng (vd. Sforum GraphQL). */
   api?: ApiSourceConfig;
+  /** Khoảng cách tối thiểu (ms) giữa hai request tới domain của nguồn, vd. 5000 theo Crawl-delay. */
+  minRequestIntervalMs?: number;
 };
 
 /**

@@ -10,7 +10,8 @@ import {
   Calendar,
   Clock
 } from 'lucide-react';
-import { useEventHubData } from '../API/useEventHubData';
+import { useImageEvents, useSources } from '../API/useDashboardEvents';
+import { addDays, vnToday } from './dashboard/shared';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
 export default function MediaLibrary() {
@@ -19,48 +20,44 @@ export default function MediaLibrary() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(null);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
-  const { data: eventHubData } = useEventHubData();
+  const { sources } = useSources();
+  // Ảnh trong 400 ngày gần nhất, mới nhất trước, tải thêm theo trang.
+  const today = vnToday();
+  const images = useImageEvents({ from: addDays(today, -399), to: today });
+  const imageItems = useMemo(() => (images.data?.pages ?? []).flatMap((p) => p.items), [images.data]);
 
   const allPhotos = useMemo(() => {
-    return eventHubData
-      .flatMap((brand) =>
-        (brand.events || [])
-          .filter((e) => {
-            if (!e.image || typeof e.image !== 'string') return false;
-            const img = e.image.toLowerCase();
-            if (
-              img.includes('chibi') ||
-              img.includes('mascot') ||
-              img.includes('avatar') ||
-              img.includes('placeholder') ||
-              img.includes('sprite') ||
-              (img.includes('logo') && !img.includes('banner'))
-            ) {
-              return false;
-            }
-            if (e.date && e.date < '2025-01-01') return false;
-            return true;
-          })
-          .map((e) => ({
-            id: `${brand.id}-${e.id}`,
-            title: e.title,
-            desc: e.desc,
-            image: e.image,
-            date: e.date,
-            time: e.time,
-            type: e.type,
-            url: e.url,
-            brandId: brand.id,
-            brandName: brand.name,
-            brandLogo: brand.logo || '/img/mtm.jpg',
-          }))
-      )
-      .sort((a, b) => {
-        const dateA = a.date || '';
-        const dateB = b.date || '';
-        return dateB.localeCompare(dateA);
+    const brandOf = new Map(sources.map((s) => [s.id, s]));
+    return imageItems
+      .filter((e) => {
+        if (!e.image || typeof e.image !== 'string') return false;
+        const img = e.image.toLowerCase();
+        return !(
+          img.includes('chibi') ||
+          img.includes('mascot') ||
+          img.includes('avatar') ||
+          img.includes('placeholder') ||
+          img.includes('sprite') ||
+          (img.includes('logo') && !img.includes('banner'))
+        );
+      })
+      .map((e) => {
+        const brand = brandOf.get(e.sourceId);
+        return {
+          id: `${e.sourceId}-${e.id}`,
+          title: e.title,
+          desc: e.description || '',
+          image: e.image,
+          date: e.date,
+          time: e.time,
+          type: e.type,
+          url: e.url,
+          brandId: e.sourceId,
+          brandName: brand?.name || e.sourceName || e.sourceId,
+          brandLogo: brand?.logo || '/img/mtm.jpg',
+        };
       });
-  }, [eventHubData]);
+  }, [imageItems, sources]);
 
   const filteredPhotos = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -233,6 +230,18 @@ export default function MediaLibrary() {
             <Sparkles size={36} className="stroke-1 text-slate-300 mb-2" />
             <p className="text-xs font-semibold text-slate-700">Không tìm thấy hình ảnh nào</p>
             <p className="text-[11px] text-slate-400 mt-0.5">Vui lòng thử lại với từ khóa hoặc danh mục khác</p>
+          </div>
+        )}
+        {images.hasNextPage && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => images.fetchNextPage()}
+              disabled={images.isFetchingNextPage}
+              className="border border-slate-200 bg-white rounded-lg px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+            >
+              {images.isFetchingNextPage ? 'Đang tải...' : 'Tải thêm ảnh'}
+            </button>
           </div>
         )}
       </div>

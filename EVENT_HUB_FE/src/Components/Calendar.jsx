@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEventsByDate } from '../API/useEventsByDate';
+import { useRangeEvents } from '../API/useDashboardEvents';
 
 const DAYS_OF_WEEK = ['Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7', 'CN'];
 
@@ -32,11 +32,13 @@ export default function Calendar({
 }) {
   const [viewDate, setViewDate] = useState(selectedDate || new Date());
   const monthKey = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}`;
-  const { sources } = useEventsByDate();
   const { isEventVisible } = useFilterContext();
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
+  // Chỉ tải bài của tháng đang xem.
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const { sources } = useRangeEvents(`${monthKey}-01`, `${monthKey}-${String(lastDay).padStart(2, '0')}`);
 
   const filteredEvents = useMemo(() => {
     return sources

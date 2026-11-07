@@ -4,7 +4,7 @@ import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
 import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
-import { useEventsByDate } from '../API/useEventsByDate';
+import { useRangeEvents } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
 import { useFilterContext } from '../context/FilterContext';
 import { normalizeDepartment } from '../utils/helpers';
@@ -37,7 +37,7 @@ export default function DepartmentView({
   const defaultType = isInternal ? 'internal' : (normalizedCode === 'mkt' ? 'ads' : 'promo');
 
   const dateStr = selectedDate.toLocaleDateString('en-CA');
-  const { sources, refetch } = useEventsByDate(dateStr);
+  const { sources, refetch } = useRangeEvents(dateStr, dateStr);
 
   useEffect(() => {
     let active = true;

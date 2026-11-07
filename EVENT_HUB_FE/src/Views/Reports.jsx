@@ -1,347 +1,242 @@
-import React, { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { dashboardApi } from '../API/API';
+import { Card, Dot, EventThumb, HeatTable, KpiCard, Delta, Segmented, ShareBars, StatusBox, WeeklyBars } from './dashboard/components';
 import {
-  ResponsiveContainer,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts';
-import {
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpRight,
-  MoreVertical,
-  FileSpreadsheet,
-  FileText,
-  Clock,
-  ExternalLink,
-} from 'lucide-react';
-import { useEventHubData } from '../API/useEventHubData';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
+  addDays,
+  downloadCsv,
+  formatDay,
+  makeBrandColor,
+  pctChange,
+  periodRange,
+  safeHttpUrl,
+  typeLabel,
+  useUrlState,
+  vnToday,
+} from './dashboard/shared';
+
+const PERIODS = [
+  ['week', 'Tuần này'],
+  ['month', 'Tháng này'],
+  ['quarter', 'Quý này'],
+];
+const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const SLOTS = [
+  ['0–6h', 0, 6],
+  ['6–9h', 6, 9],
+  ['9–12h', 9, 12],
+  ['12–15h', 12, 15],
+  ['15–18h', 15, 18],
+  ['18–21h', 18, 21],
+  ['21–24h', 21, 24],
+];
+const WEEKS = 12;
+const CSV_MAX_ROWS = 2000;
+const get = (fn, params) => fn(params).then((r) => r.data);
 
 export default function Reports() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const { data: eventHubData } = useEventHubData();
+  const [filters, setFilters] = useUrlState({ period: 'week' });
+  const [exporting, setExporting] = useState(false);
+  const today = vnToday();
+  const range = periodRange(filters.period, today);
 
-  const { competitors, totalEvents, timelineData, brandChartData, calendarGrid, dailyEvents, eventDaysSet } = useMemo(() => {
-    const list = eventHubData.filter((b) => b.id !== 'minhtuan');
-    const allEvents = [];
-    const dateCounts = {};
-    const eventDays = new Set();
+  // 12 tuần gần nhất, bắt đầu từ thứ Hai.
+  const thisMonday = periodRange('week', today).from;
+  const weeksFrom = addDays(thisMonday, -7 * (WEEKS - 1));
+  const weeks = Array.from({ length: WEEKS }, (_, i) => addDays(weeksFrom, 7 * i));
 
-    eventHubData.forEach((b) => {
-      (b.events || []).forEach((e) => {
-        allEvents.push({ ...e, brandName: b.name, logo: b.logo });
-        if (e.date) {
-          dateCounts[e.date] = (dateCounts[e.date] || 0) + 1;
-          eventDays.add(e.date);
-        }
-      });
-    });
+  const summary = useQuery({ queryKey: ['dash', 'summary', range], queryFn: () => get(dashboardApi.summary, range) });
+  const byType = useQuery({ queryKey: ['dash', 'breakdown', 'type', range], queryFn: () => get(dashboardApi.breakdown, { ...range, by: 'type' }) });
+  const when = useQuery({ queryKey: ['dash', 'breakdown', 'wh', range], queryFn: () => get(dashboardApi.breakdown, { ...range, by: 'weekday-hour' }) });
+  const weekly = useQuery({
+    queryKey: ['dash', 'breakdown', 'week', weeksFrom, today],
+    queryFn: () => get(dashboardApi.breakdown, { from: weeksFrom, to: today, type: 'promo', by: 'week' }),
+  });
+  const topPromos = useQuery({ queryKey: ['dash', 'events', 'promo', range], queryFn: () => get(dashboardApi.events, { ...range, type: 'promo', limit: 10 }) });
 
-    const y = currentDate.getFullYear();
-    const m = currentDate.getMonth();
-    const d = currentDate.getDate();
-    const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const sources = useMemo(() => summary.data?.sources ?? [], [summary.data]);
+  const colorOf = useMemo(() => makeBrandColor(sources.map((s) => s.sourceId)), [sources]);
+  const nameOf = (id, fallback) => sources.find((s) => s.sourceId === id)?.name ?? fallback ?? id;
 
-    return {
-      competitors: list,
-      totalEvents: allEvents.length,
-      timelineData: Object.entries(dateCounts).map(([date, count]) => ({
-        date: date.split('-').reverse().slice(0, 2).join('/'),
-        count,
-      })),
-      brandChartData: list.map((b) => ({ subject: b.name, A: (b.events || []).length })),
-      calendarGrid: {
-        blanks: Array.from({ length: new Date(y, m, 1).getDay() }, (_, i) => i),
-        days: Array.from({ length: new Date(y, m + 1, 0).getDate() }, (_, i) => i + 1),
-        year: y,
-        month: m + 1,
-      },
-      dailyEvents: allEvents.filter((item) => item.date === dateStr),
-      eventDaysSet: eventDays,
-    };
-  }, [currentDate, eventHubData]);
+  const s = summary.data;
+  const promoTotal = (byType.data?.rows ?? []).filter((r) => r.type === 'promo' || r.type === 'sale').reduce((a, r) => a + r.count, 0);
 
-  const handleExportExcel = () => {
-    const allEvents = eventHubData.flatMap((b) =>
-      (b.events || []).map((e) => ({
-        'Thương hiệu': b.name,
-        'Tiêu đề': e.title,
-        'Phân loại': e.type,
-        'Ngày': e.date,
-        'Giờ': e.time,
-        'Đường dẫn': e.url || '',
-      }))
-    );
-
-    if (allEvents.length === 0) {
-      alert('Chưa có dữ liệu sự kiện để xuất báo cáo.');
-      return;
+  const whenGrid = useMemo(() => {
+    const grid = WEEKDAYS.map(() => SLOTS.map(() => 0));
+    for (const r of when.data?.rows ?? []) {
+      const slot = SLOTS.findIndex(([, a, b]) => r.hour >= a && r.hour < b);
+      if (r.weekday >= 1 && r.weekday <= 7 && slot >= 0) grid[r.weekday - 1][slot] += r.count;
     }
+    return grid;
+  }, [when.data]);
+  const peak = useMemo(() => {
+    let best = null;
+    whenGrid.forEach((row, d) => row.forEach((v, j) => (!best || v > best.v ? (best = { v, d, j }) : null)));
+    return best && best.v > 0 ? best : null;
+  }, [whenGrid]);
 
-    const headers = Object.keys(allEvents[0]).join(',');
-    const rows = allEvents.map((row) =>
-      Object.values(row)
-        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-        .join(',')
-    );
+  const weeklyRows = weekly.data?.rows ?? [];
+  const weeklyBySource = (() => {
+    const rows = weeklyRows;
+    const keys = Array.from({ length: WEEKS }, (_, i) => addDays(weeksFrom, 7 * i));
+    return sources.map((src) => ({
+      ...src,
+      values: keys.map((w) => rows.find((r) => r.sourceId === src.sourceId && r.week === w)?.count ?? 0),
+    }));
+  })();
+  const weeklyMax = Math.max(1, ...weeklyBySource.flatMap((x) => x.values));
 
-    const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Bao_Cao_Su_Kien_EventHub_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  /** Xuất mọi bài trong kỳ (phân trang qua API), tối đa CSV_MAX_ROWS dòng. */
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows = [];
+      let cursor;
+      do {
+        const page = await get(dashboardApi.events, { ...range, limit: 100, cursor });
+        rows.push(...page.items);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor && rows.length < CSV_MAX_ROWS);
+      downloadCsv(
+        `bao-cao-${range.from}_${range.to}.csv`,
+        ['Ngày', 'Giờ', 'Hãng', 'Loại', 'Tiêu đề', 'Link'],
+        rows.map((e) => [e.date, e.time, nameOf(e.sourceId, e.sourceName), typeLabel(e.type), e.title, e.url]),
+      );
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
-    <div className="w-full min-h-full bg-[#f4f7fc] text-slate-800 font-sans p-4 sm:p-5 lg:p-6 flex flex-col xl:flex-row gap-5">
-      
-      <div className="flex-1 flex flex-col gap-4 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Báo cáo dữ liệu crawl</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Thống kê sự kiện theo ngày/tháng</p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition"
-            >
-              <FileSpreadsheet size={14} className="text-emerald-600" />
-              <span>Xuất Excel</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition"
-            >
-              <FileText size={14} />
-              <span>Xuất CSV</span>
-            </button>
-          </div>
+    <div className="w-full min-h-full bg-[#f4f5f7] text-slate-800 p-4 sm:p-5 lg:p-6 pb-12">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Báo cáo</h1>
+          <p className="text-xs text-slate-500">
+            {formatDay(range.from, { day: '2-digit', month: '2-digit', year: 'numeric' })} – {formatDay(range.to, { day: '2-digit', month: '2-digit', year: 'numeric' })} · so với kỳ trước cùng độ dài
+          </p>
         </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">{totalEvents}</div>
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">Sự kiện</div>
-              <div className="text-lg font-bold text-slate-900">{totalEvents} bài</div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">{competitors.length}</div>
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">Đối thủ</div>
-              <div className="text-lg font-bold text-slate-900">{competitors.length} hãng</div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">6h</div>
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">Tần suất</div>
-              <div className="text-lg font-bold text-slate-900">4 lần/ngày</div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">24h</div>
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">Trạng thái</div>
-              <div className="text-lg font-bold text-slate-900">Hoạt động</div>
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Segmented label="Kỳ báo cáo" options={PERIODS} value={filters.period} onChange={(period) => setFilters({ period })} />
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exporting}
+            className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-50 disabled:opacity-50"
+          >
+            {exporting ? 'Đang xuất...' : 'Xuất CSV'}
+          </button>
+          <button type="button" disabled title="Sắp có" className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs text-slate-400 cursor-not-allowed">
+            Xuất Excel · sắp có
+          </button>
+          <button type="button" disabled title="Sắp có" className="rounded-lg px-3 py-1.5 text-xs bg-blue-600/40 text-white cursor-not-allowed">
+            Gửi báo cáo tuần qua Telegram · sắp có
+          </button>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-          <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-100 flex flex-col justify-between">
-            <h3 className="text-sm font-bold text-slate-800">Năng lực đối thủ</h3>
-            <div className="h-48 w-full flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={brandChartData}>
-                  <PolarGrid stroke="#e2e8f0" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 10 }} />
-                  <PolarRadiusAxis tick={false} />
-                  <Radar dataKey="A" stroke="#2563eb" fill="#2563eb" fillOpacity={0.35} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-100 flex flex-col justify-between">
-            <h3 className="text-sm font-bold text-slate-800">Xu hướng biến động</h3>
-            <div className="h-48 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timelineData}>
-                  <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        <div className="xl:hidden bg-white p-5 rounded-2xl border border-slate-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">Tháng {calendarGrid.month}, {calendarGrid.year}</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month - 2, 1))} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">
-                <ChevronLeft size={16} />
-              </button>
-              <button onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month, 1))} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 text-center gap-y-2 text-xs">
-            {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((d, i) => (
-              <span key={i} className="text-[10px] text-slate-400 font-semibold">{d}</span>
-            ))}
-            {calendarGrid.blanks.map((_, i) => <span key={`b-${i}`} />)}
-            {calendarGrid.days.map((day) => {
-              const isSelected = day === currentDate.getDate();
-              const dayStr = `${calendarGrid.year}-${String(calendarGrid.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const hasEvent = eventDaysSet.has(dayStr);
-
-              return (
-                <button
-                  key={day}
-                  onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month - 1, day))}
-                  className={`w-7 h-7 mx-auto rounded-full flex flex-col items-center justify-center text-xs font-medium relative ${
-                    isSelected ? 'bg-blue-600 text-white font-bold' : hasEvent ? 'bg-blue-50 text-blue-700 font-bold border border-blue-200' : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>{day}</span>
-                  {hasEvent && !isSelected && <span className="absolute bottom-0.5 w-1 h-1 bg-blue-600 rounded-full" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-800">
-              Ngày {String(currentDate.getDate()).padStart(2, '0')}/{String(currentDate.getMonth() + 1).padStart(2, '0')}/{currentDate.getFullYear()}
-            </h3>
-            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">{dailyEvents.length} bài</span>
-          </div>
-
-          <div className="divide-y divide-slate-50 max-h-80 overflow-y-auto">
-            {dailyEvents.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">Không có bài viết nào trong ngày này.</div>
-            ) : (
-              dailyEvents.map((item, idx) => (
-                <div key={idx} className="py-3 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl border border-slate-100 p-0.5 flex items-center justify-center shrink-0">
-                      {item.logo ? <img src={item.logo} alt="" className="w-full h-full object-contain rounded-lg" /> : <span>{item.brandName[0]}</span>}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-slate-800 truncate">{item.title}</div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1"><Clock size={12} /> {item.brandName} • {item.time}</div>
-                    </div>
-                  </div>
-                  {item.url && (
-                    <a href={item.url} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 flex items-center justify-center shrink-0">
-                      <ExternalLink size={13} />
-                    </a>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
       </div>
 
-      <div className="w-full xl:w-80 shrink-0 flex flex-col gap-4">
-        <div className="hidden xl:block bg-white p-5 rounded-2xl border border-slate-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">Tháng {calendarGrid.month}, {calendarGrid.year}</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month - 2, 1))} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">
-                <ChevronLeft size={16} />
-              </button>
-              <button onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month, 1))} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-7 text-center gap-y-2 text-xs">
-            {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((d, i) => (
-              <span key={i} className="text-[10px] text-slate-400 font-semibold">{d}</span>
-            ))}
-            {calendarGrid.blanks.map((_, i) => <span key={`b-${i}`} />)}
-            {calendarGrid.days.map((day) => {
-              const isSelected = day === currentDate.getDate();
-              const dayStr = `${calendarGrid.year}-${String(calendarGrid.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const hasEvent = eventDaysSet.has(dayStr);
-              return (
-                <button key={day} onClick={() => setCurrentDate(new Date(calendarGrid.year, calendarGrid.month - 1, day))} className={`w-7 h-7 mx-auto rounded-full flex flex-col items-center justify-center text-xs font-medium relative ${
-                  isSelected ? 'bg-blue-600 text-white font-bold' : hasEvent ? 'bg-blue-50 text-blue-700 font-bold border border-blue-200' : 'text-slate-700 hover:bg-slate-100'
-                }`}>
-                  <span>{day}</span>
-                  {hasEvent && !isSelected && <span className="absolute bottom-0.5 w-1 h-1 bg-blue-600 rounded-full" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 space-y-3">
-          <span className="text-sm font-bold text-slate-800">Thương hiệu đối thủ</span>
-          <div className="space-y-2">
-            {competitors.map((brand) => (
-              <div key={brand.id} className="p-2.5 rounded-xl border border-slate-100 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 bg-white border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 rounded-lg">
-                    <img
-                      src={brand.logo || '/img/mtm.jpg'}
-                      alt={brand.name}
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = '/img/mtm.jpg';
-                      }}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 truncate">{brand.name}</div>
-                    <div className="text-[10px] text-slate-400">{(brand.targetUrls || []).length} URLs</div>
-                  </div>
-                </div>
-                <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-md text-blue-600 bg-blue-50">
-                  {(brand.events || []).length} bài
-                </span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 mb-3.5">
+        <StatusBox isLoading={summary.isLoading} error={summary.error} height={98}>
+          <KpiCard label="Tổng bài của đối thủ" value={s?.total ?? 0}>
+            <Delta pct={pctChange(s?.total ?? 0, s?.previousTotal ?? 0)} suffix="so với kỳ trước" />
+          </KpiCard>
+        </StatusBox>
+        <StatusBox isLoading={byType.isLoading} error={byType.error} height={98}>
+          <KpiCard label="Bài khuyến mãi" value={promoTotal}>
+            {s?.total ? `Chiếm ${Math.round((promoTotal / s.total) * 100)}% tổng bài` : 'Chưa có bài trong kỳ'}
+          </KpiCard>
+        </StatusBox>
+        <KpiCard label="Sản phẩm được nhắc nhiều nhất" value="Sắp có">
+          Cần trích tên sản phẩm từ tiêu đề bài
+        </KpiCard>
+        <StatusBox isLoading={when.isLoading} error={when.error} height={98}>
+          <KpiCard label="Khung giờ đăng nhiều nhất" value={peak ? SLOTS[peak.j][0] : '—'}>
+            {peak ? `${WEEKDAYS[peak.d]} · ${peak.v} bài` : 'Chưa đủ dữ liệu giờ đăng'}
+          </KpiCard>
+        </StatusBox>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 mb-3.5">
+        <Card title="Thị phần bài đăng" aside={<span className="text-xs text-slate-500">rê chuột để so với kỳ trước</span>}>
+          <StatusBox isLoading={summary.isLoading} error={summary.error} empty={!s?.total} height={150}>
+            <ShareBars rows={s?.bySource ?? []} colorOf={colorOf} />
+          </StatusBox>
+        </Card>
+        <Card title="Đối thủ đăng bài vào lúc nào?" aside={<span className="text-xs text-slate-500">Giờ Việt Nam · màu đậm = nhiều bài</span>}>
+          <StatusBox isLoading={when.isLoading} error={when.error} height={220}>
+            <HeatTable
+              rowLabels={WEEKDAYS}
+              colLabels={SLOTS.map(([l]) => l)}
+              values={whenGrid}
+              describe={(i, j, v) => [['Số bài', `${v}`]]}
+            />
+            <p className="text-xs text-slate-500 mt-2">Chỉ tính bài có giờ đăng; bài chỉ có ngày không nằm trong bảng này.</p>
+          </StatusBox>
+        </Card>
+      </div>
+
+      <Card className="mb-3.5" title="Nhịp độ khuyến mãi theo tuần" aside={<span className="text-xs text-slate-500">12 tuần gần nhất · mỗi hãng một biểu đồ, cùng thang đo</span>}>
+        <StatusBox isLoading={weekly.isLoading} error={weekly.error} height={240}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {weeklyBySource.map((src) => (
+              <div key={src.sourceId} className="min-w-0">
+                <h4 className="text-xs font-semibold flex items-center gap-1.5 mb-1">
+                  <Dot color={colorOf(src.sourceId)} />
+                  {src.name} · {src.values.reduce((a, b) => a + b, 0)} bài khuyến mãi
+                </h4>
+                <WeeklyBars weeks={weeks} values={src.values} color={colorOf(src.sourceId)} yMax={weeklyMax} label={`Bài khuyến mãi theo tuần của ${src.name}`} />
               </div>
             ))}
           </div>
-        </div>
+        </StatusBox>
+      </Card>
 
-      </div>
-
+      <Card title="Khuyến mãi mới nhất trong kỳ">
+        <StatusBox isLoading={topPromos.isLoading} error={topPromos.error} empty={topPromos.data?.items?.length === 0} height={200}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-slate-500">
+                <tr>
+                  <th className="text-left font-medium py-2 px-2">Chương trình</th>
+                  <th className="text-left font-medium py-2 px-2">Hãng</th>
+                  <th className="text-left font-medium py-2 px-2 whitespace-nowrap">Ngày đăng</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {(topPromos.data?.items ?? []).map((e) => {
+                  const href = safeHttpUrl(e.url);
+                  return (
+                    <tr key={e.id} className="border-t border-slate-100">
+                      <td className="py-2 px-2">
+                        <div className="flex items-center gap-2.5 min-w-60">
+                          <EventThumb src={e.image} />
+                          <span className="line-clamp-2">{e.title}</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-2 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Dot color={colorOf(e.sourceId)} />
+                          {nameOf(e.sourceId, e.sourceName)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 whitespace-nowrap tabular-nums">{e.date ? formatDay(e.date) : '—'}</td>
+                      <td className="py-2 px-2 text-right">
+                        {href && (
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline whitespace-nowrap">
+                            Mở bài
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </StatusBox>
+        <p className="text-xs text-slate-500 mt-2">Bài chưa rõ ngày đăng không được tính vào báo cáo.</p>
+      </Card>
     </div>
   );
 }

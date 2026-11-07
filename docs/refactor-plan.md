@@ -224,6 +224,50 @@ Làm theo 4 giai đoạn trong khoảng 8 tuần cho một người, mỗi giai 
 
 Chưa làm: đo baseline trên nguồn thật (cần chạy crawl thật).
 
+### Tiến độ bảo mật nhóm "Trước go-live" (07/11/2026)
+
+Đã làm, có test (`src/security.spec.ts`):
+
+- Chỉ admin được chạy crawl; đã xóa `GET /crawlers/run`.
+- Giới hạn đăng nhập: 5 lần / 15 phút mỗi email, 20 lần / 15 phút mỗi IP (`@nestjs/throttler`, lưu trong bộ nhớ process).
+- `getAllowedTypes` mặc định từ chối khi thiếu user hoặc role lạ.
+- Chống SSRF: chỉ `http(s)`, chặn IP nội bộ và metadata, kiểm tra lại sau mỗi chuyển hướng. Chưa chống DNS rebinding.
+- `helmet`; CORS theo `CORS_ORIGINS` (mặc định `localhost:5173`); tắt `/docs` khi `NODE_ENV=production`.
+- Secret trong `docker-compose.yml` chuyển sang `.env` (mẫu ở `.env.example`); Postgres chỉ mở `127.0.0.1`; app không khởi động nếu thiếu secret, và ở production từ chối secret mặc định.
+
+Còn lại: người dùng tự đổi mật khẩu admin `123456`; đặt `JWT_SECRET`, `DB_PASSWORD` mới khi triển khai; quét lịch sử git bằng `gitleaks`; bật trust proxy khi chạy sau reverse proxy.
+
+### Tiến độ giai đoạn 3 (07/11/2026)
+
+Đã làm, có test:
+
+- Chống chạy chồng: Postgres advisory lock theo nguồn (`CrawlLockService`); lượt trùng trả `skipped`.
+- Lượt `running` quá 30 phút chuyển thành `failed` khi khởi động và trước mỗi lượt cron.
+- Cron 15 phút chỉ cào nguồn đến hạn theo `interval` (mặc định 6h, tối thiểu 15 phút); "Cào tất cả" vẫn cào ngay.
+- Tối đa 4 nguồn song song; giãn cách theo domain trong `CrawlerHttpClient` (mặc định 500 ms, `minRequestIntervalMs` theo nguồn, Thế giới di động 5000 ms). Bỏ nghỉ cố định giữa nguồn và giữa URL.
+- Bỏ tải ảnh cho mọi bài RSS; chỉ bài mới thiếu ảnh được tải trang chi tiết, trong giới hạn 10 trang mỗi lần.
+- Ghi DB theo lô: một truy vấn tải event của nguồn, insert từng 100 dòng, chỉ update cột thay đổi, `lastSeenAt` cập nhật một lệnh.
+
+Số đo một lần chạy thật (4 nguồn, chỉ link web), là số đo đơn lẻ, chưa phải trung bình:
+
+| | Baseline sáng 07/11 (tuần tự) | Sau giai đoạn 3 (song song) |
+| --- | --- | --- |
+| Tổng thời gian | khoảng 95 giây (tổng 4 nguồn + nghỉ 2–3 giây giữa nguồn) | 5,7 giây; lượt hai 9,8 giây |
+| Request CellphoneS | 11 (cron cũ có lượt 103 do tải ảnh RSS) | 9 |
+| Request Hoàng Hà / FPT Shop / Thế giới di động | 4 / 4 / 1 | 4 / 4–6 / 2 |
+
+Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễn tập rollback và khôi phục DB (cần môi trường triển khai).
+
+### Tiến độ giai đoạn 4: API dashboard mới (07/11/2026)
+
+- Thêm `GET /dashboard/summary`, `/dashboard/timeseries`, `/dashboard/breakdown?by=type|weekday-hour|week`, `/dashboard/events` (con trỏ, tối đa 100 dòng, không trả `rawData`). API cũ `/events/overview`, `/events/by-date` giữ nguyên cho các trang chưa làm lại.
+- Đếm bằng SQL theo giờ Việt Nam. Quyền phòng ban nằm trong điều kiện truy vấn, sửa lỗi thiếu bài khi vượt 5.000 dòng (có test 6.000 bài).
+- `eventDate` đang là `timestamp` không múi giờ, giá trị là giờ địa phương của process ghi; SQL cộng độ lệch để ra giờ Việt Nam. Test chạy đúng với `TZ=UTC` và `TZ=Asia/Ho_Chi_Minh`. Chuyển sang `timestamptz` để bỏ độ lệch này là việc riêng.
+- Test trên Postgres thật: `src/dashboard/dashboard.service.db.spec.ts`, chạy khi đặt `DASHBOARD_TEST_DB` (DB tạm, test xóa bảng).
+- Các trang còn lại (thanh menu, Hằng ngày, Đối thủ, Phòng ban, Lịch tháng, Thư viện ảnh, Cài đặt) chuyển sang `/dashboard/*`; đã gỡ `/events`, `/events/latest`, `/events/overview`, `/events/dashboard`, `/events/by-date`. `GET /dashboard/sources` cho thanh menu; `/dashboard/events` có `includeOwn`, `hasImage`, trả `origin`.
+- Migration `TimestampsToTimestamptz`: 13 cột thời gian chuyển sang `timestamptz`, quy đổi từ giờ +7 (Node và Postgres `Asia/Bangkok` đều +7). API dashboard dùng `AT TIME ZONE 'Asia/Ho_Chi_Minh'`, bỏ độ lệch theo múi giờ server. Migration đã chạy trên DB thật ngày 07/11/2026 do dev server tự chạy migration khi phát hiện file mới (chưa thử trên bản sao trước như kế hoạch); đã kiểm tra lại dữ liệu sau khi chạy: mốc thời gian khớp với giá trị ghi nhận trước đó. Bài học: tắt `DB_MIGRATIONS_RUN` hoặc dừng dev server trước khi thêm migration.
+- Đo trên DB tạm 100.000 event (một máy dev, 15 lần mỗi truy vấn): p95 cao nhất 295 ms (khung giờ đăng, cả năm); khoảng 30–90 ngày dưới 150 ms. Truy vấn dùng index `eventDate` có sẵn, nên chưa thêm index.
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

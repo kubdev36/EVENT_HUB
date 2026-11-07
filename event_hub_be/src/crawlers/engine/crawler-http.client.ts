@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as http from 'http';
 import * as https from 'https';
+import {
+  assertPublicHttpUrl,
+  HostResolver,
+  UnsafeUrlError,
+} from '../helpers/url-guard.helper.js';
+
+const MAX_REDIRECTS = 5;
 
 export type FetchPageResult =
   | { kind: 'ok'; url: string; html: string }
@@ -30,6 +37,60 @@ const BLOCK_MARKERS = [
 export class CrawlerHttpClient {
   private readonly logger = new Logger(CrawlerHttpClient.name);
   private requests = 0;
+  /** Số request theo host, để đo đúng từng nguồn khi nhiều nguồn chạy song song. */
+  private readonly hostRequests = new Map<string, number>();
+  /** Hàng đợi theo host: request tới cùng host chạy lần lượt, cách nhau ít nhất N ms. */
+  private readonly hostQueues = new Map<string, Promise<void>>();
+  private readonly hostIntervals = new Map<string, number>();
+  /** Khoảng cách mặc định giữa hai request tới cùng một host. */
+  defaultHostIntervalMs = 500;
+  /** Phân giải DNS; thay được trong test. */
+  resolveHost?: HostResolver;
+
+  /** Đặt khoảng cách tối thiểu cho một host (vd. Crawl-delay của robots.txt). */
+  setHostInterval(host: string, ms: number): void {
+    this.hostIntervals.set(CrawlerHttpClient.hostKey(host), Math.max(0, ms));
+  }
+
+  /** Tổng số request đã gửi tới các host này từ khi khởi động. */
+  requestCountFor(hosts: string[]): number {
+    return [...new Set(hosts.map(CrawlerHttpClient.hostKey))].reduce(
+      (sum, h) => sum + (this.hostRequests.get(h) ?? 0),
+      0,
+    );
+  }
+
+  static hostKey(hostOrUrl: string): string {
+    let host = hostOrUrl;
+    try {
+      if (/^https?:\/\//i.test(hostOrUrl)) host = new URL(hostOrUrl).hostname;
+    } catch {
+      // không phải URL: dùng nguyên chuỗi làm host
+      host = hostOrUrl;
+    }
+    return host.toLowerCase().replace(/^www\./, '');
+  }
+
+  /**
+   * Chờ đến lượt gửi request tới host của url. Mọi request (trang, AJAX, API, trang chi tiết)
+   * đều đi qua đây, nên giới hạn vẫn đúng khi nhiều nguồn chạy song song.
+   */
+  async waitForSlot(url: string): Promise<void> {
+    const host = CrawlerHttpClient.hostKey(url);
+    const interval = this.hostIntervals.get(host) ?? this.defaultHostIntervalMs;
+    const prev = this.hostQueues.get(host) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((r) => (release = r));
+    this.hostQueues.set(
+      host,
+      prev.then(() => mine),
+    );
+    await prev;
+    this.requests += 1;
+    this.hostRequests.set(host, (this.hostRequests.get(host) ?? 0) + 1);
+    // Giữ hàng đợi thêm interval ms rồi mới cho request kế tiếp tới cùng host.
+    setTimeout(release, interval);
+  }
 
   private readonly userAgents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -40,11 +101,6 @@ export class CrawlerHttpClient {
   /** Tổng số request đã gửi từ khi khởi động; lấy hiệu hai lần đọc để đo một lần crawl. */
   get requestCount(): number {
     return this.requests;
-  }
-
-  /** Ghi nhận một request gửi bằng fetch trực tiếp ngoài client này (vd. GraphQL). */
-  countRequest(): void {
-    this.requests += 1;
   }
 
   /** Trả null khi không lấy được trang; dùng cho việc phụ như lấy ảnh. */
@@ -80,12 +136,7 @@ export class CrawlerHttpClient {
     for (const attemptUrl of urlsToTry) {
       for (let retry = 0; retry < 2; retry += 1) {
         try {
-          this.requests += 1;
-          const resp = await fetch(attemptUrl, {
-            headers: this.buildHeaders(attemptUrl),
-            redirect: 'follow',
-            signal: AbortSignal.timeout(10000),
-          });
+          const resp = await this.fetchFollowingSafeRedirects(attemptUrl);
 
           if (!resp.ok) {
             await resp.body
@@ -124,6 +175,10 @@ export class CrawlerHttpClient {
           return { kind: 'ok', url: resp.url || attemptUrl, html };
         } catch (err) {
           lastReason = err instanceof Error ? err.message : String(err);
+          if (err instanceof UnsafeUrlError) {
+            this.logger.warn(lastReason);
+            return { kind: 'failed', url, reason: lastReason };
+          }
           if (retry === 1) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
@@ -134,12 +189,50 @@ export class CrawlerHttpClient {
     return { kind: 'failed', url, reason: lastReason };
   }
 
+  /** Kiểm tra URL an toàn (chống SSRF); dùng cho request gửi ngoài client này, vd. GraphQL. */
+  async assertSafeUrl(url: string): Promise<URL> {
+    return assertPublicHttpUrl(url, this.resolveHost);
+  }
+
+  /** fetch tự xử lý chuyển hướng, kiểm tra lại URL an toàn ở mỗi bước. */
+  private async fetchFollowingSafeRedirects(
+    startUrl: string,
+  ): Promise<Response> {
+    let current = startUrl;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+      await assertPublicHttpUrl(current, this.resolveHost);
+      await this.waitForSlot(current);
+      const resp = await fetch(current, {
+        headers: this.buildHeaders(current),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+      });
+      const location = resp.headers.get('location');
+      if (resp.status >= 300 && resp.status < 400 && location) {
+        await resp.body?.cancel().catch(() => undefined);
+        current = new URL(location, current).toString();
+        continue;
+      }
+      // Ghi lại URL cuối để engine resolve link tương đối đúng.
+      Object.defineProperty(resp, 'url', { value: current });
+      return resp;
+    }
+    throw new Error(`Quá ${MAX_REDIRECTS} lần chuyển hướng: ${startUrl}`);
+  }
+
   async postAjax(
     url: string,
     body: string,
     referer?: string,
     headers?: Record<string, string>,
   ): Promise<string | null> {
+    try {
+      await assertPublicHttpUrl(url, this.resolveHost);
+    } catch (err) {
+      this.logger.warn((err as Error).message);
+      return null;
+    }
+    await this.waitForSlot(url);
     return new Promise((resolve) => {
       let parsed: URL;
       try {
@@ -162,7 +255,6 @@ export class CrawlerHttpClient {
         ...headers,
       };
 
-      this.requests += 1;
       const request = transport.request(
         {
           hostname: parsed.hostname,

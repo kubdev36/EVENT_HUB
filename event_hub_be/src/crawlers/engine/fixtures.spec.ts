@@ -24,7 +24,8 @@ const TGDD: ExtractConfig = {
 const FIXTURE_TIME = new Date('2026-11-07T10:40:00+07:00');
 const FPT: ExtractConfig = {
   articleUrlPattern:
-    '^/tin-tuc/(tin-khuyen-mai|tin-moi|danh-gia)/[a-z0-9-]+-[0-9]+$',
+    // Một số bài FPT Shop không có ID số ở cuối (vd. .../danh-gia-samsung-galaxy-s26-fe).
+    '^/tin-tuc/(tin-khuyen-mai|tin-moi|danh-gia)/[a-z0-9-]+$',
   fetchDetail: true,
 };
 
@@ -116,6 +117,21 @@ describe('Bộ mẫu FPT Shop', () => {
       );
     }
     expect(items.some((i) => i.url.includes('/for-gamers/'))).toBe(false);
+  });
+
+  it('nhận bài không có ID số, loại trang chuyên mục và trang danh sách', () => {
+    const html =
+      '<a href="/tin-tuc/danh-gia/danh-gia-samsung-galaxy-s26-fe"><h3>Đánh giá Samsung Galaxy S26 FE chi tiết</h3></a>' +
+      '<a href="/tin-tuc/danh-gia"><h3>Đánh giá sản phẩm công nghệ</h3></a>' +
+      '<a href="/tin-tuc"><h3>Tin tức công nghệ mới nhất</h3></a>';
+    const urls = GenericHtmlEngine.extractConfigured(
+      html,
+      'https://fptshop.com.vn/tin-tuc/danh-gia',
+      FPT,
+    ).map((i) => i.url);
+    expect(urls).toEqual([
+      'https://fptshop.com.vn/tin-tuc/danh-gia/danh-gia-samsung-galaxy-s26-fe',
+    ]);
   });
 
   it('gộp link ảnh và link tiêu đề của cùng một bài', () => {

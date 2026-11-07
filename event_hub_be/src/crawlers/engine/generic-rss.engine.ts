@@ -171,45 +171,7 @@ export class GenericRssEngine {
       });
     }
 
-    // 4. Auto-enrich missing images from target article og:image
-    await this.enrichMissingImages(items);
-
+    // Ảnh còn thiếu được lấy ở bước crawl hai bước, chỉ cho bài mới (CrawlerService).
     return items;
-  }
-
-  private async enrichMissingImages(items: ParsedCrawlItem[]): Promise<void> {
-    const missing = items.filter(
-      (it) => !it.image && it.url && it.url.startsWith('http'),
-    );
-    if (missing.length === 0) return;
-
-    // Fetch og:image for missing items in small batches
-    const limit = 8;
-    for (let i = 0; i < missing.length; i += limit) {
-      const batch = missing.slice(i, i + limit);
-      await Promise.all(
-        batch.map(async (item) => {
-          try {
-            const resp = await this.httpClient.fetchHtml(item.url);
-            if (resp?.html) {
-              const $page = cheerio.load(resp.html);
-              const ogImg =
-                $page('meta[property="og:image"]').attr('content') ||
-                $page('meta[name="twitter:image"]').attr('content') ||
-                $page('article img, .post-content img').first().attr('src') ||
-                null;
-              if (ogImg && !NoiseFilterHelper.isNoiseImage(ogImg)) {
-                item.image = UrlNormalizerHelper.resolveUrl(item.url, ogImg);
-              }
-            }
-          } catch (err) {
-            // Thiếu ảnh không làm hỏng item; chỉ ghi log.
-            this.logger.debug(
-              `Không lấy được ảnh cho ${item.url}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }),
-      );
-    }
   }
 }

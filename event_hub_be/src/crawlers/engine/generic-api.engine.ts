@@ -65,6 +65,11 @@ export class GenericApiEngine {
         'Thiếu categoryIds hợp lệ',
       );
     }
+    try {
+      await this.httpClient.assertSafeUrl(SFORUM_GQL);
+    } catch (err) {
+      throw new CrawlFetchError('failed', SFORUM_GQL, (err as Error).message);
+    }
     const maxPages = Math.min(Math.max(api.maxPages ?? 3, 1), 10);
     const gqlHeaders: Record<string, string> = {
       'content-type': 'application/json',
@@ -93,11 +98,13 @@ export class GenericApiEngine {
             }
           `;
 
-          this.httpClient.countRequest();
+          await this.httpClient.waitForSlot(SFORUM_GQL);
           const gqlResp = await fetch(SFORUM_GQL, {
             method: 'POST',
             headers: gqlHeaders,
             body: JSON.stringify({ query: gqlQuery, variables: {} }),
+            // Không đi theo chuyển hướng: endpoint đã được kiểm tra chống SSRF ở trên.
+            redirect: 'error',
             signal: AbortSignal.timeout(15000),
           });
 
@@ -128,7 +135,6 @@ export class GenericApiEngine {
           );
 
           if (meta && meta.current_page >= meta.total_pages) break;
-          await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           if (err instanceof CrawlFetchError) throw err;
           const reason = err instanceof Error ? err.message : String(err);
@@ -270,8 +276,6 @@ export class GenericApiEngine {
           rawData: { sourceUrl: baseUrl, kind: 'ajax' },
         });
       });
-
-      await new Promise((r) => setTimeout(r, 400));
     }
 
     return items;

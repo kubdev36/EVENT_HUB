@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -146,6 +147,10 @@ export class CrawlerSourceItemDto {
   @ApiProperty({ example: ['https://cellphones.com.vn/danh-sach-khuyen-mai'] })
   @IsArray()
   @IsString({ each: true })
+  @Matches(/^https?:\/\/[^\s]+$/i, {
+    each: true,
+    message: 'Mỗi đường dẫn phải bắt đầu bằng http:// hoặc https://',
+  })
   targetUrls: string[];
 
   @ApiProperty({ required: false })
@@ -169,6 +174,13 @@ export class CrawlerSourceItemDto {
   @ValidateNested()
   @Type(() => ApiSourceConfigDto)
   api?: ApiSourceConfigDto;
+
+  @ApiProperty({ required: false, example: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60000)
+  minRequestIntervalMs?: number;
 }
 
 export class SaveCrawlerSourcesDto {
