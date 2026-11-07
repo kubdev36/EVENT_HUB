@@ -287,7 +287,7 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - **Nhật ký:** bảng `audit_logs`, interceptor ghi mọi request ghi dữ liệu và đăng nhập (thành công và thất bại): người thao tác, hành động, id đối tượng, tên trường (không có giá trị), IP, kết quả. `GET /audit-logs` (admin), tab "Nhật ký" trong Cài đặt. Request bị chặn trước khi vào controller (CSRF 403, throttle 429, 401 của guard) chưa được ghi.
 - **gitleaks (07/11/2026, 38 commit):** 11 kết quả. 10 nằm trong `EVENT_HUB_FE/public/img/viettel.htm`, một trang Facebook lưu khi đang đăng nhập, có khóa phiên; đã xóa file ở commit `15a96d9`, phiên phải được đăng xuất trên Facebook, file vẫn còn trong lịch sử git (repo đang công khai). Kết quả còn lại là badge CircleCI mẫu trong README. Đã ghi fingerprint vào `.gitleaksignore`. Chạy lại: `docker run --rm -v "<repo>:/repo:ro" zricethezav/gitleaks:v8.21.2 git /repo --redact`.
 - **Sửa thêm:** lưu cấu hình crawler từ giao diện từng xóa mất `extract`, `api`, `minRequestIntervalMs`, `storeImages` (`normalizeCrawlerTarget` chỉ giữ vài trường); đã sửa và có test.
-- **Còn lại:** access token ngắn hạn + refresh token + thu hồi phiên; bỏ hẳn header Bearer; `npm audit` báo 28 lỗ hổng trong thư viện (chưa xem xét).
+- **Còn lại:** access token ngắn hạn + refresh token + thu hồi phiên; bỏ hẳn header Bearer; `npm audit` (08/11/2026): sau `npm audit fix` và gỡ `@nestjs/mau` (không dùng), thư viện production của backend và frontend còn 0 lỗ hổng; còn 11 lỗ hổng moderate/low ở backend và 4 ở frontend, đều trong công cụ dev (jest, eslint). Jest giữ ở 30.4.2 vì 30.5 không nạp được `@nestjs/throttler` (vòng lặp require(esm)).
 
 ### Rủi ro
 
