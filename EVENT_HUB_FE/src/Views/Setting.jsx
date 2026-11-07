@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Bot, Users, Send, Sliders, Building2, X } from 'lucide-react';
-import { settingsApi, usersApi } from '../API/API';
-import { useEventHubData } from '../API/useEventHubData';
+import { useQuery } from '@tanstack/react-query';
+import { dashboardApi, settingsApi, usersApi } from '../API/API';
+
+const RUN_STATUS = { success: 'thành công', partial: 'lỗi một phần', blocked: 'bị chặn', failed: 'lỗi', running: 'đang chạy' };
+/** "07/11 10:45 · thành công" từ lần cào gần nhất của nguồn. */
+function formatLastRun(run) {
+  if (!run?.startedAt) return 'Chưa chạy';
+  const when = new Date(run.startedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+  return `${when} · ${RUN_STATUS[run.status] || run.status}`;
+}
 
 // Tabs
 import CrawlerTab from './Settings/tabs/CrawlerTab';
@@ -22,7 +30,8 @@ const EMPTY_TELEGRAM_CONFIG = { botToken: '', chatId: '', notifyImmediately: fal
 
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
-  const { data: eventHubData } = useEventHubData();
+  // Lần cào gần nhất của từng nguồn (hiển thị trên thẻ crawler).
+  const runs = useQuery({ queryKey: ['dash', 'summary', 'setting-runs'], queryFn: () => dashboardApi.summary({}).then((r) => r.data.sources) });
 
   // Data states
   const [crawlers, setCrawlers] = useState([]);
@@ -43,24 +52,6 @@ export default function Setting() {
   const [modalMode, setModalMode] = useState(null); // 'add-crawler'|'edit-crawler'|'delete-crawler'|'add-user'|'edit-user'|'delete-user'|'reset-pass'|'edit-keyword'|'add-department'|'edit-department'|'delete-department'
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({});
-
-  // Initialize crawlers from eventHubData
-  useEffect(() => {
-    setCrawlers(
-      eventHubData
-        .filter((item) => item.id !== 'minhtuan')
-        .map((comp) => ({
-          id: comp.id,
-          name: comp.name,
-          logo: comp.logo,
-          enabled: true,
-          interval: '6h',
-          lastRun: 'Chưa có dữ liệu',
-          targetUrls: comp.targetUrls || [],
-          events: comp.events || [],
-        }))
-    );
-  }, [eventHubData]);
 
   // Load all settings & users
   useEffect(() => {
@@ -83,11 +74,7 @@ export default function Setting() {
         }
         if (settings.crawler_sources) {
           setCrawlers(
-            settings.crawler_sources.map((item) => ({
-              ...item,
-              events: eventHubData.find((brand) => brand.id === item.id)?.events || [],
-              lastRun: item.lastRun || 'Chưa có dữ liệu',
-            }))
+            settings.crawler_sources.map((item) => ({ ...item }))
           );
         }
 
@@ -110,7 +97,7 @@ export default function Setting() {
     return () => {
       active = false;
     };
-  }, [eventHubData]);
+  }, []);
 
   const reloadUsers = async () => {
     try {
@@ -449,7 +436,7 @@ export default function Setting() {
 
         {activeTab === 'crawler' && (
           <CrawlerTab
-            crawlers={crawlers}
+            crawlers={crawlers.map((c) => ({ ...c, lastRun: formatLastRun(runs.data?.find((r) => r.sourceId === c.id)) }))}
             crawlLoading={crawlLoading}
             onRunAll={handleRunAllCrawlers}
             onAddCrawler={() => handleOpenModal('add-crawler')}

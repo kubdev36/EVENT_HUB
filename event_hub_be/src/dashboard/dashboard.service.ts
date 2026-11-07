@@ -36,6 +36,10 @@ export type ResolvedFilter = {
   types: string[] | null;
   /** null = xem mọi loại (admin); [] = không được xem gì. */
   allowed: string[] | null;
+  /** Tính cả bài của nguồn nội bộ (Minh Tuấn Mobile) khi không chọn hãng cụ thể. */
+  includeOwn: boolean;
+  /** Chỉ bài có ảnh http(s). */
+  hasImage: boolean;
 };
 
 /**
@@ -100,6 +104,8 @@ export class DashboardService {
       brands: brands?.length ? brands : null,
       types,
       allowed,
+      includeOwn: dto.includeOwn === 'true',
+      hasImage: dto.hasImage === 'true',
     };
   }
 
@@ -115,7 +121,9 @@ export class DashboardService {
     );
     if (f.brands)
       qb.andWhere('e.sourceId IN (:...brands)', { brands: f.brands });
-    else qb.andWhere('e.sourceId NOT IN (:...own)', { own: OWN_SOURCE_IDS });
+    else if (!f.includeOwn)
+      qb.andWhere('e.sourceId NOT IN (:...own)', { own: OWN_SOURCE_IDS });
+    if (f.hasImage) qb.andWhere("e.image LIKE 'http%'");
     if (f.types) qb.andWhere('e.type IN (:...types)', { types: f.types });
     if (f.allowed) {
       if (f.allowed.length === 0) qb.andWhere('1 = 0');
@@ -296,6 +304,7 @@ export class DashboardService {
         'e.type',
         'e.eventDate',
         'e.eventTime',
+        'e.origin',
       ])
       .orderBy('e.eventDate', 'DESC')
       .addOrderBy('e.id', 'DESC')
@@ -320,6 +329,7 @@ export class DashboardService {
         image: e.image && /^https?:\/\//i.test(e.image) ? e.image : null,
         url: /^https?:\/\//i.test(e.url) ? e.url : null,
         type: e.type,
+        origin: e.origin,
         date: e.eventDate
           ? DashboardService.vnDay(new Date(e.eventDate))
           : null,
@@ -330,6 +340,12 @@ export class DashboardService {
           ? DashboardService.encodeCursor(new Date(last.eventDate), last.id)
           : null,
     };
+  }
+
+  /** Danh sách nguồn đang cấu hình (nhẹ, cho thanh menu). own = nguồn nội bộ. */
+  async sources() {
+    const meta = await this.sourceMeta();
+    return meta.map((m) => ({ ...m, own: OWN_SOURCE_IDS.includes(m.id) }));
   }
 
   private async sourceMeta(): Promise<

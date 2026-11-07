@@ -62,6 +62,12 @@ export class DashboardController {
     );
   }
 
+  @Get('sources')
+  @ApiOperation({ summary: 'Danh sách nguồn (id, tên, logo) cho thanh menu' })
+  sources() {
+    return this.dashboard.sources();
+  }
+
   @Get('events')
   @ApiOperation({
     summary: 'Danh sách bài, mới nhất trước, phân trang bằng con trỏ',

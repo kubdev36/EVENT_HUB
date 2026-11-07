@@ -4,7 +4,7 @@ import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
 import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
-import { useEventsByDate } from '../API/useEventsByDate';
+import { useRangeEvents } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
 
 const COMPETITOR_TYPES = ['promo', 'ads', 'live', 'release', 'sale', 'other'];
@@ -18,7 +18,7 @@ export default function Competitor() {
   const [crawlMessage, setCrawlMessage] = useState('');
 
   const dateStr = selectedDate.toLocaleDateString('en-CA');
-  const { sources, refetch } = useEventsByDate(dateStr);
+  const { sources, refetch } = useRangeEvents(dateStr, dateStr, { includeOwn: false });
 
   const handleCrawlAll = async () => {
     setCrawlLoading(true);

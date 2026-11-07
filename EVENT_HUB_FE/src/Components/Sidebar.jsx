@@ -14,7 +14,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { useEventHubData } from '../API/useEventHubData';
+import { useSources } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
 import { normalizeDepartment } from '../utils/helpers';
 import { useFilterContext } from '../context/FilterContext';
@@ -57,7 +57,9 @@ function getDepartmentViewId(code) {
 }
 
 export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user }) {
-  const { data: sources } = useEventHubData();
+  // Chỉ cần tên và logo của đối thủ: gọi API nhẹ, không tải toàn bộ bài viết.
+  const { sources: allSources } = useSources();
+  const sources = allSources.filter((s) => !s.own);
   const { checkedFilters, toggleFilter } = useFilterContext();
   const [departments, setDepartments] = useState([]);
   const userDept = normalizeDepartment(user?.department);

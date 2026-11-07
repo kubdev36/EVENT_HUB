@@ -3,7 +3,9 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ChevronLeft, ChevronRight, ChevronDown, X, ExternalLink, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { useEventsByDate } from '../API/useEventsByDate';
+import { useRangeEvents } from '../API/useDashboardEvents';
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const DAYS_OF_WEEK = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const MAX_SHOW_EVENTS = 2;
@@ -14,11 +16,14 @@ export default function Month() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [selectedDayEvents, setSelectedDayEvents] = useState(null);
-  const { sources } = useEventsByDate();
   const { isEventVisible } = useFilterContext();
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+  // Lịch hiện 42 ô (6 tuần) bắt đầu từ Chủ nhật: chỉ tải bài trong khoảng đó.
+  const gridStart = new Date(year, month, 1 - new Date(year, month, 1).getDay());
+  const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41);
+  const { sources } = useRangeEvents(ymd(gridStart), ymd(gridEnd));
 
   const events = useMemo(() => {
     return sources

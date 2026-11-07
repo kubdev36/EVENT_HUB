@@ -4,7 +4,7 @@ import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
 import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
-import { useEventHubData } from '../API/useEventHubData';
+import { useRangeEvents } from '../API/useDashboardEvents';
 
 import { useFilterContext } from '../context/FilterContext';
 
@@ -13,10 +13,11 @@ export default function Daily() {
   const [selectedCompetitor, setSelectedCompetitor] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const { data: eventHubData, refetch } = useEventHubData();
   const { isEventVisible } = useFilterContext();
 
   const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+  // Chỉ tải bài của ngày đang xem (kể cả bài nội bộ).
+  const { sources: eventHubData, refetch } = useRangeEvents(dateStr, dateStr);
 
   const displayCompetitors = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();

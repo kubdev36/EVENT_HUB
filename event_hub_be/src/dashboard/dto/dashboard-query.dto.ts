@@ -40,6 +40,22 @@ export class DashboardFilterDto {
   @MaxLength(500)
   brands?: string;
 
+  @ApiPropertyOptional({
+    enum: ['true', 'false'],
+    description: 'Tính cả bài nội bộ (Minh Tuấn Mobile).',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeOwn?: 'true' | 'false';
+
+  @ApiPropertyOptional({
+    enum: ['true', 'false'],
+    description: 'Chỉ bài có ảnh.',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  hasImage?: 'true' | 'false';
+
   @ApiPropertyOptional({ example: 'promo' })
   @IsOptional()
   @IsString()
