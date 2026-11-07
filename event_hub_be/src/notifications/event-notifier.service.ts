@@ -1,17 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Event } from '../events/entity/event.entity.js';
 import { TelegramService } from '../telegram/telegram.service.js';
+import { NotificationOutboxService } from './notification-outbox.service.js';
 
 export type NotifySummary = { sent: number; failed: number; skipped: boolean };
 
 type TelegramResponse =
   { ok?: boolean; skipped?: boolean; description?: string } | null | undefined;
 
+/** Số thông báo lấy ra mỗi lượt gửi. */
+const BATCH_SIZE = 50;
+
 /**
- * Gửi thông báo Telegram cho bài mới. Chỉ gán notifiedAt khi Telegram xác nhận gửi thành công;
- * gửi lỗi thì bài vẫn chờ để lần sau gửi lại. Bài chưa rõ ngày đăng không được gửi.
+ * Gửi thông báo Telegram từ hàng chờ notification_outbox. Gửi thành công thì đánh dấu sent và
+ * gán events.notifiedAt; lỗi thì hẹn thử lại với khoảng chờ tăng dần.
+ * Đảm bảo "ít nhất một lần": tiến trình chết sau khi Telegram nhận nhưng trước khi đánh dấu sent
+ * thì thông báo có thể được gửi lại một lần.
  */
 @Injectable()
 export class EventNotifierService {
@@ -22,10 +28,11 @@ export class EventNotifierService {
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
     private readonly telegramService: TelegramService,
+    private readonly outbox: NotificationOutboxService,
   ) {}
 
   async notifyPendingEvents(pauseMs = 800): Promise<NotifySummary> {
-    // Chống chạy chồng: cron và lần cào bấm tay dùng chung một lượt gửi, không gửi trùng.
+    // Chống chạy chồng trong cùng process; giữa các process do khóa dòng của outbox lo.
     if (this.notifying) return this.notifying;
     this.notifying = this.sendPending(pauseMs).finally(() => {
       this.notifying = null;
@@ -34,25 +41,40 @@ export class EventNotifierService {
   }
 
   private async sendPending(pauseMs: number): Promise<NotifySummary> {
-    const unnotifiedEvents = await this.eventRepository.find({
-      where: { notifiedAt: IsNull(), dateUnknown: false },
-      order: { createdAt: 'ASC' },
-      take: 50,
-    });
-
     const summary: NotifySummary = { sent: 0, failed: 0, skipped: false };
-    for (const event of unnotifiedEvents) {
-      const outcome = await this.notifyTelegram(event);
-      if (outcome === 'skipped') {
-        // Chưa cấu hình hoặc đang tắt: dừng, giữ nguyên các event chờ.
+    const claimed = await this.outbox.claimDue(BATCH_SIZE);
+    if (claimed.length === 0) return summary;
+
+    const events = await this.eventRepository.find({
+      where: { id: In(claimed.map((c) => c.eventId)) },
+    });
+    const byId = new Map(events.map((e) => [e.id, e]));
+
+    for (let i = 0; i < claimed.length; i += 1) {
+      const job = claimed[i];
+      const event = byId.get(job.eventId);
+      if (!event) {
+        // Bài đã bị xóa (outbox xóa theo cascade) giữa lúc lấy và lúc gửi.
+        await this.outbox.markFailed(
+          job.id,
+          job.attempts,
+          'Bài không còn tồn tại',
+        );
+        continue;
+      }
+      const result = await this.notifyTelegram(event);
+      if (result.outcome === 'skipped') {
+        // Chưa cấu hình hoặc đang tắt: trả các dòng còn lại về hàng chờ, không tính lần thử.
         summary.skipped = true;
+        await this.outbox.release(claimed.slice(i).map((c) => c.id));
         break;
       }
-      if (outcome === 'sent') {
-        event.notifiedAt = new Date();
-        await this.eventRepository.save(event);
+      if (result.outcome === 'sent') {
+        await this.outbox.markSent(job.id);
+        await this.eventRepository.update(event.id, { notifiedAt: new Date() });
         summary.sent += 1;
       } else {
+        await this.outbox.markFailed(job.id, job.attempts, result.error);
         summary.failed += 1;
       }
       // Nghỉ giữa các lần gửi để tránh bị Telegram giới hạn tốc độ
@@ -61,7 +83,7 @@ export class EventNotifierService {
     }
     if (summary.failed > 0) {
       this.logger.warn(
-        `Telegram: ${summary.failed} event gửi lỗi, sẽ thử lại lần sau.`,
+        `Telegram: ${summary.failed} thông báo gửi lỗi, sẽ thử lại sau.`,
       );
     }
     return summary;
@@ -92,7 +114,11 @@ export class EventNotifierService {
 
   private async notifyTelegram(
     event: Event,
-  ): Promise<'sent' | 'failed' | 'skipped'> {
+  ): Promise<
+    | { outcome: 'sent' }
+    | { outcome: 'skipped' }
+    | { outcome: 'failed'; error: string }
+  > {
     const msg = EventNotifierService.buildTelegramMessage(event);
     try {
       const image =
@@ -100,7 +126,7 @@ export class EventNotifierService {
       let response: TelegramResponse = image
         ? await this.telegramService.sendPhoto(image, msg)
         : await this.telegramService.sendMessage(msg);
-      if (response?.skipped) return 'skipped';
+      if (response?.skipped) return { outcome: 'skipped' };
       if (!response?.ok && image) {
         // Ảnh hỏng hoặc hết hạn: gửi lại dạng chữ để không mất thông báo.
         this.logger.warn(
@@ -108,16 +134,14 @@ export class EventNotifierService {
         );
         response = await this.telegramService.sendMessage(msg);
       }
-      if (response?.ok) return 'sent';
-      this.logger.warn(
-        `Telegram gửi lỗi cho event ${event.id}: ${response?.description ?? 'unknown'}`,
-      );
-      return 'failed';
+      if (response?.ok) return { outcome: 'sent' };
+      const error = response?.description ?? 'unknown';
+      this.logger.warn(`Telegram gửi lỗi cho event ${event.id}: ${error}`);
+      return { outcome: 'failed', error };
     } catch (err) {
-      this.logger.warn(
-        `Telegram gửi lỗi cho event ${event.id}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return 'failed';
+      const error = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Telegram gửi lỗi cho event ${event.id}: ${error}`);
+      return { outcome: 'failed', error };
     }
   }
 }

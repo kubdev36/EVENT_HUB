@@ -296,6 +296,13 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - `CrawlerService` (888 dòng) tách thành: `CrawlerService` chỉ điều phối (chọn nguồn, khóa, ghi `crawler_runs`, lưu ảnh, gọi thông báo); `CrawlSourceReader` đọc cấu hình nguồn và từ khóa; `CrawlPipeline` tải (chọn engine theo dạng URL, giữ quy tắc cũ), lọc, phân loại, ghép bài có sẵn, lấy trang chi tiết; `EventUpsertService` đọc bài có sẵn và ghi theo lô; `EventNotifierService` (module `notifications/`) gửi Telegram.
 - Không đổi hành vi: 95 test crawler cũ pass không cần sửa nội dung, thêm test chọn engine theo URL.
 
+### Giai đoạn 4: outbox thông báo (A2, 08/11/2026)
+
+- Bảng `notification_outbox` (migration `CreateNotificationOutbox`, chuyển các bài đã rõ ngày mà chưa gửi sang). Bài mới đã rõ ngày được thêm vào outbox trong cùng transaction với lúc ghi bài; bài cũ vừa tìm được ngày đăng cũng được thêm; sự kiện nhập tay cũng vậy.
+- `EventNotifierService` lấy việc bằng `FOR UPDATE SKIP LOCKED` (nhiều tiến trình không lấy trùng), giữ dòng 5 phút (chết giữa chừng thì tiến trình khác lấy lại). Lỗi thì thử lại sau 1, 2, 4... phút (tối đa 6 giờ), quá 10 lần thì `failed`. Telegram chưa cấu hình thì trả dòng về hàng chờ, không tính lần thử. Gửi thành công vẫn gán `events.notifiedAt`.
+- Đảm bảo "ít nhất một lần": nếu tiến trình chết sau khi Telegram đã nhận nhưng trước khi đánh dấu `sent`, thông báo có thể bị gửi lại một lần.
+- Test trên Postgres thật: `notification-outbox.service.db.spec.ts` (chạy khi có `DASHBOARD_TEST_DB`).
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

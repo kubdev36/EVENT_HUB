@@ -17,6 +17,7 @@ import { GenericApiEngine } from './engine/generic-api.engine.js';
 import { GenericHtmlEngine } from './engine/generic-html.engine.js';
 import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
 import { ImagesModule } from '../images/images.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { ImageStoreService } from '../images/image-store.service.js';
 import { EventNotifierService } from '../notifications/event-notifier.service.js';
 import { CrawlSourceReader } from './sources/crawl-source.reader.js';
@@ -29,6 +30,7 @@ import { EventUpsertService } from './persistence/event-upsert.service.js';
     TypeOrmModule.forFeature([Event, CrawlerRun, Setting]),
     AuthModule,
     ImagesModule,
+    NotificationsModule,
   ],
   controllers: [CrawlerController],
   providers: [

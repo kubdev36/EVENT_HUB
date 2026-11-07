@@ -61,7 +61,7 @@ d('DashboardService (Postgres)', () => {
   afterAll(() => ds?.destroy());
   beforeEach(async () => {
     allowed = null;
-    await ds.query('TRUNCATE events, crawler_runs, settings');
+    await ds.query('TRUNCATE events, crawler_runs, settings CASCADE');
   });
   const insert = (rows: Partial<Event>[]) =>
     ds.getRepository(Event).save(rows as Event[], { chunk: 500 });

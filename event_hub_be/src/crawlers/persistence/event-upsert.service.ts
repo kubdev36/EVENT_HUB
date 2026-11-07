@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
+import { NotificationOutboxService } from '../../notifications/notification-outbox.service.js';
 import { Event } from '../../events/entity/event.entity.js';
 import { CrawlTarget, ParsedCrawlItem } from '../crawler.types.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
@@ -49,6 +50,7 @@ export class EventUpsertService {
   constructor(
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
+    private readonly outbox: NotificationOutboxService,
   ) {}
 
   /** Event có sẵn của nguồn (một truy vấn, không lấy rawData) để ghép theo externalId, URL, hash. */
@@ -67,6 +69,7 @@ export class EventUpsertService {
         eventTime: true,
         dateUnknown: true,
         type: true,
+        notifiedAt: true,
       },
     });
     const index: ExistingIndex = {
@@ -85,13 +88,26 @@ export class EventUpsertService {
   /**
    * Ghi DB theo lô: bài mới insert theo từng 100 dòng; bài đã có chỉ update cột thay đổi;
    * lastSeenAt của mọi bài đã thấy cập nhật bằng một truy vấn. Trả số bài mới.
+   * Chạy trong một transaction: bài mới và thông báo chờ gửi (outbox) được ghi cùng nhau.
    */
   async persist(
     target: CrawlTarget,
     prepared: PreparedItem[],
   ): Promise<number> {
+    return this.eventRepository.manager.transaction((m) =>
+      this.persistIn(m, target, prepared),
+    );
+  }
+
+  private async persistIn(
+    m: EntityManager,
+    target: CrawlTarget,
+    prepared: PreparedItem[],
+  ): Promise<number> {
     const now = new Date();
     const seenIds: string[] = [];
+    /** Bài đã có, vừa tìm được ngày đăng thật và chưa từng thông báo: giờ mới đủ điều kiện gửi. */
+    const becameNotifiable: string[] = [];
     const newEvents: Event[] = [];
     const newHashes = new Set<string>();
 
@@ -112,7 +128,9 @@ export class EventUpsertService {
           dateInfo,
         });
         if (Object.keys(patch).length > 0) {
-          await this.eventRepository.update(existing.id, patch);
+          await m.update(Event, existing.id, patch);
+          if (patch.dateUnknown === false && !existing.notifiedAt)
+            becameNotifiable.push(existing.id);
           Object.assign(existing, patch);
         }
         continue;
@@ -151,10 +169,19 @@ export class EventUpsertService {
     }
 
     if (newEvents.length > 0) {
-      await this.eventRepository.save(newEvents, { chunk: WRITE_CHUNK });
+      await m.save(Event, newEvents, { chunk: WRITE_CHUNK });
     }
+    // Chỉ thông báo bài đã rõ ngày đăng (giữ quy tắc cũ).
+    await this.outbox.enqueue(
+      [
+        ...newEvents.filter((e) => !e.dateUnknown).map((e) => e.id),
+        ...becameNotifiable,
+      ],
+      m,
+    );
     for (let i = 0; i < seenIds.length; i += 500) {
-      await this.eventRepository.update(
+      await m.update(
+        Event,
         { id: In(seenIds.slice(i, i + 500)) },
         { lastSeenAt: now },
       );

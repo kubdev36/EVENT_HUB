@@ -5,6 +5,7 @@ import { AddEventImageStore1794200000000 } from './1794200000000-AddEventImageSt
 import { EncryptTelegramToken1794300000000 } from './1794300000000-EncryptTelegramToken.js';
 import { CreateAuditLogs1794300000001 } from './1794300000001-CreateAuditLogs.js';
 import { CreateRefreshTokens1794400000000 } from './1794400000000-CreateRefreshTokens.js';
+import { CreateNotificationOutbox1794500000000 } from './1794500000000-CreateNotificationOutbox.js';
 
 /** Danh sách migration theo thứ tự. Thêm migration mới vào cuối mảng. */
 export const migrations = [
@@ -15,4 +16,5 @@ export const migrations = [
   EncryptTelegramToken1794300000000,
   CreateAuditLogs1794300000001,
   CreateRefreshTokens1794400000000,
+  CreateNotificationOutbox1794500000000,
 ];

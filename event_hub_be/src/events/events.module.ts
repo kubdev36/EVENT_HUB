@@ -5,9 +5,14 @@ import { Event } from './entity/event.entity.js';
 import { EventsController } from './controller/events.controller.js';
 import { EventsService } from './service/events.service.js';
 import { Setting } from '../settings/entity/setting.entity.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Event, Setting]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Event, Setting]),
+    AuthModule,
+    NotificationsModule,
+  ],
   controllers: [EventsController],
   providers: [EventsService],
   exports: [EventsService],

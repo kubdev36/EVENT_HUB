@@ -14,11 +14,13 @@ type Row = Record<string, unknown>;
 /** Repository giả trong bộ nhớ, đủ cho các hàm CrawlerService đang dùng. */
 function memoryRepo(rows: Row[] = []) {
   const matches = (row: Row, where: Row) =>
-    Object.entries(where).every(([k, v]) =>
-      v && typeof v === 'object' && '_type' in (v as object)
-        ? row[k] == null
-        : row[k] === v,
-    );
+    Object.entries(where).every(([k, v]) => {
+      if (!(v && typeof v === 'object' && '_type' in (v as object)))
+        return row[k] === v;
+      const op = v as { _type: string; _value?: unknown };
+      if (op._type === 'in') return (op._value as unknown[]).includes(row[k]);
+      return row[k] == null;
+    });
   const saveOne = (row: Row) => {
     if (!row.id) row.id = `id-${rows.length + 1}`;
     if (!rows.includes(row)) rows.push(row);
@@ -41,7 +43,7 @@ function memoryRepo(rows: Row[] = []) {
       }),
     );
   };
-  return {
+  const repo = {
     rows,
     create: (data: Row) => ({ ...data }),
     save: jest.fn(async (row: Row | Row[]) =>
@@ -58,6 +60,67 @@ function memoryRepo(rows: Row[] = []) {
       ) ?? null,
     find: async ({ where }: { where?: Row } = {}) =>
       rows.filter((r) => !where || matches(r, where)),
+    /** Transaction giả: chạy thẳng trên repository trong bộ nhớ. */
+    manager: {
+      transaction: async <T>(fn: (m: unknown) => Promise<T>) =>
+        fn({
+          save: (_e: unknown, data: Row | Row[]) => repo.save(data),
+          update: (_e: unknown, criteria: unknown, patch: Row) =>
+            repo.update(criteria, patch),
+        }),
+    },
+  };
+  return repo;
+}
+
+/** Outbox giả trong bộ nhớ, cùng hợp đồng với NotificationOutboxService (không có khóa thời gian). */
+function memoryOutbox() {
+  const jobs: Array<{
+    id: string;
+    eventId: string;
+    attempts: number;
+    status: string;
+    claimed: boolean;
+  }> = [];
+  return {
+    jobs,
+    enqueue: jest.fn(async (ids: string[]) => {
+      for (const eventId of ids)
+        if (!jobs.some((j) => j.eventId === eventId))
+          jobs.push({
+            id: `ob-${jobs.length + 1}`,
+            eventId,
+            attempts: 0,
+            status: 'pending',
+            claimed: false,
+          });
+    }),
+    claimDue: async (limit: number) => {
+      const due = jobs
+        .filter((j) => j.status === 'pending' && !j.claimed)
+        .slice(0, limit);
+      due.forEach((j) => (j.claimed = true));
+      return due.map(({ id, eventId, attempts }) => ({
+        id,
+        eventId,
+        attempts,
+      }));
+    },
+    markSent: async (id: string) => {
+      const j = jobs.find((x) => x.id === id)!;
+      j.status = 'sent';
+      j.claimed = false;
+    },
+    markFailed: async (id: string, attempts: number) => {
+      const j = jobs.find((x) => x.id === id)!;
+      j.attempts = attempts + 1;
+      j.claimed = false;
+    },
+    release: async (ids: string[]) => {
+      jobs
+        .filter((j) => ids.includes(j.id))
+        .forEach((j) => (j.claimed = false));
+    },
   };
 }
 
@@ -95,6 +158,10 @@ function build(opts: {
     }),
   };
   const imageStore = { storeForTarget: jest.fn(async () => ({})) };
+  // Bài có sẵn chưa thông báo và đã rõ ngày: đã nằm trong outbox (như migration chuyển dữ liệu).
+  const outbox = memoryOutbox();
+  for (const e of opts.events ?? [])
+    if (!e.notifiedAt && !e.dateUnknown) void outbox.enqueue([e.id as string]);
   // Khóa giả trong bộ nhớ, cùng hành vi với CrawlLockService: nguồn đang chạy thì bỏ qua.
   const held = new Set<string>();
   const lock = {
@@ -120,8 +187,12 @@ function build(opts: {
     runRepo as never,
     new CrawlSourceReader(settingRepo as never),
     pipeline,
-    new EventUpsertService(eventRepo as never),
-    new EventNotifierService(eventRepo as never, telegram as never),
+    new EventUpsertService(eventRepo as never, outbox as never),
+    new EventNotifierService(
+      eventRepo as never,
+      telegram as never,
+      outbox as never,
+    ),
     httpClient as never,
     lock as never,
     imageStore as never,
@@ -134,6 +205,7 @@ function build(opts: {
     httpClient,
     lock,
     imageStore,
+    outbox,
   };
 }
 
@@ -683,5 +755,90 @@ describe('CrawlPipeline.engineForUrl', () => {
     ['https://didongviet.vn/dchannel/khuyen-mai/', 'html'],
   ])('%s -> %s', (url, kind) => {
     expect(CrawlPipeline.engineForUrl(url)).toBe(kind);
+  });
+});
+
+describe('Hàng chờ thông báo (outbox)', () => {
+  const list = 'https://shop.vn/feed';
+  const html = (iso: string) =>
+    `<html><head><script type="application/ld+json">{"@type":"NewsArticle","datePublished":"${iso}"}</script></head><body></body></html>`;
+
+  it('bài mới chưa rõ ngày đăng không vào hàng chờ; có ngày thì vào', async () => {
+    const { service, outbox, eventRepo } = build({
+      telegram: {
+        sendMessage: jest.fn(async () => ({ ok: false, skipped: true })),
+      },
+      items: {
+        [list]: [
+          promo({
+            url: 'https://shop.vn/km-a',
+            title: 'Khuyến mãi giảm giá máy A',
+          }),
+          promo({
+            url: 'https://shop.vn/km-b',
+            title: 'Khuyến mãi giảm giá máy B',
+            eventDate: new Date('2026-11-05T05:00:00Z'),
+            eventTime: '12:00',
+          }),
+        ],
+      },
+    });
+    await service.crawlTarget(source([list]));
+    const dated = eventRepo.rows.find((r) => r.url === 'https://shop.vn/km-b')!;
+    expect(outbox.jobs.map((j) => j.eventId)).toEqual([dated.id]);
+  });
+
+  it('bài cũ chưa rõ ngày, lần cào sau tìm được ngày thì mới vào hàng chờ', async () => {
+    const url = 'https://shop.vn/tin-tuc/km-c';
+    const { service, outbox } = build({
+      telegram: {
+        sendMessage: jest.fn(async () => ({ ok: false, skipped: true })),
+      },
+      events: [
+        {
+          id: 'old',
+          sourceId: 'shop',
+          url,
+          title: 'Khuyến mãi giảm giá máy C',
+          type: 'promo',
+          dateUnknown: true,
+          eventDate: null,
+          notifiedAt: null,
+          externalId: null,
+        },
+      ],
+      items: { [list]: [promo({ url, title: 'Khuyến mãi giảm giá máy C' })] },
+      detailPages: { [url]: html('2026-11-04T04:03:01+00:00') },
+    });
+    expect(outbox.jobs).toHaveLength(0);
+    await service.crawlTarget({
+      ...source([list]),
+      extract: { fetchDetail: true, detailDelayMs: 0 },
+    });
+    expect(outbox.jobs.map((j) => j.eventId)).toEqual(['old']);
+  });
+
+  it('gửi lỗi thì thông báo vẫn ở hàng chờ, tăng số lần thử', async () => {
+    const event = {
+      id: 'e1',
+      title: 'A',
+      sourceName: 'S',
+      type: 'promo',
+      url: 'https://a.vn/1',
+      dateUnknown: false,
+      notifiedAt: null,
+    };
+    const { service, outbox } = build({
+      events: [event],
+      telegram: {
+        sendMessage: jest.fn(async () => ({
+          ok: false,
+          description: 'HTTP 500',
+        })),
+      },
+    });
+    await service.notifyPendingEvents(0);
+    expect(outbox.jobs[0]).toMatchObject({ status: 'pending', attempts: 1 });
+    expect(event.notifiedAt).toBeNull();
   });
 });
