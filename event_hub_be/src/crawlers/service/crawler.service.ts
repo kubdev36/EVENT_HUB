@@ -193,12 +193,14 @@ export class CrawlerService {
 
       // Filter and deduplicate within current run
       const validItems: ParsedCrawlItem[] = [];
+      const exclude = CrawlerService.buildExcludePattern(target);
       for (const item of rawItems) {
         const cleanUrl = UrlNormalizerHelper.normalizeUrl(item.url);
         if (
           !cleanUrl ||
           seen.has(cleanUrl) ||
-          NoiseFilterHelper.isNoiseTitle(item.title)
+          NoiseFilterHelper.isNoiseTitle(item.title) ||
+          exclude?.test(item.title)
         )
           continue;
         seen.add(cleanUrl);
@@ -372,6 +374,20 @@ export class CrawlerService {
     if (errors.length === 0) return 'success';
     if (errors.length < attempts) return 'partial';
     return errors.every((e) => e.kind === 'blocked') ? 'blocked' : 'failed';
+  }
+
+  /** Regex loại tiêu đề theo cấu hình nguồn; cấu hình sai thì ghi log và bỏ qua bộ lọc. */
+  static buildExcludePattern(target: CrawlTarget): RegExp | null {
+    const pattern = target.extract?.excludeTitlePattern;
+    if (!pattern) return null;
+    try {
+      return new RegExp(pattern, 'iu');
+    } catch (err) {
+      new Logger(CrawlerService.name).warn(
+        `excludeTitlePattern của ${target.id} không hợp lệ: ${(err as Error).message}`,
+      );
+      return null;
+    }
   }
 
   private finishRun(

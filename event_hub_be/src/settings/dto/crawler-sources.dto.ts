@@ -54,6 +54,12 @@ export class ExtractConfigDto {
   @MaxLength(300)
   articleUrlPattern?: string;
 
+  @ApiProperty({ required: false, example: 'người có ảnh hưởng|chính sách' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  excludeTitlePattern?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()

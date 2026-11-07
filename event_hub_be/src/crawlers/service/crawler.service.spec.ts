@@ -405,6 +405,27 @@ describe('CrawlerService', () => {
       });
     });
 
+    it('bỏ bài có tiêu đề khớp excludeTitlePattern của nguồn', async () => {
+      const { service, eventRepo } = build({
+        items: {
+          [list]: [
+            promo({
+              url: 'https://shop.vn/tin-tuc/a-1',
+              title: 'Danh sách người có ảnh hưởng hợp tác với Shop',
+            }),
+            promo({ url: 'https://shop.vn/tin-tuc/b-2' }),
+          ],
+        },
+      });
+      await service.crawlTarget({
+        ...source([list]),
+        extract: { excludeTitlePattern: 'NGƯỜI CÓ ẢNH HƯỞNG' },
+      });
+      expect(eventRepo.rows.map((r) => r.url)).toEqual([
+        'https://shop.vn/tin-tuc/b-2',
+      ]);
+    });
+
     it('nguồn không bật fetchDetail thì không tải trang chi tiết', async () => {
       const { service, httpClient } = build({ items: { [list]: [promo()] } });
       await service.crawlTarget(source([list]));

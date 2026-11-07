@@ -35,6 +35,8 @@ export type ExtractConfig = {
   imageAttrs?: string[];
   /** Regex áp lên pathname của link; chỉ link khớp mới được coi là bài viết. */
   articleUrlPattern?: string;
+  /** Regex (không phân biệt hoa thường) áp lên tiêu đề; khớp thì bỏ bài (trang giới thiệu, chính sách...). */
+  excludeTitlePattern?: string;
   /** Tải trang chi tiết của bài mới để lấy ngày đăng, ảnh (crawl hai bước). */
   fetchDetail?: boolean;
   /** Số trang chi tiết tối đa mỗi lần cào, mặc định 10. */
