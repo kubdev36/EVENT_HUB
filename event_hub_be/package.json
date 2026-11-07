@@ -22,7 +22,9 @@
     "typeorm": "typeorm-ts-node-esm -d ./src/data-source.ts",
     "migration:generate": "typeorm-ts-node-esm migration:generate -d ./src/data-source.ts",
     "migration:run": "typeorm-ts-node-esm migration:run -d ./src/data-source.ts",
-    "migration:revert": "typeorm-ts-node-esm migration:revert -d ./src/data-source.ts"
+    "migration:revert": "typeorm-ts-node-esm migration:revert -d ./src/data-source.ts",
+    "start:worker": "node dist/worker",
+    "start:worker:dev": "nest start --watch --entryFile worker"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -45,6 +47,7 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.0",
+    "pg-boss": "12.38.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.35.5",

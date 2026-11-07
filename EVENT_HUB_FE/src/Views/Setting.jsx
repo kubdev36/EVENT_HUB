@@ -11,14 +11,17 @@ function formatLastRun(run) {
   return `${when} · ${RUN_STATUS[run.status] || run.status}`;
 }
 
-const RESULT_LABEL = { ...RUN_STATUS, skipped: 'bỏ qua vì nguồn đang được cào' };
-/** "Di Động Việt: thành công, tìm thấy 18 bài, 3 bài mới." từ kết quả cào một nguồn. */
-function describeCrawl(name, r) {
-  if (!r || typeof r !== 'object') return `Đã cào ${name}.`;
-  const status = RESULT_LABEL[r.status] || r.status || 'xong';
-  const counts = r.status === 'skipped' ? '' : `, tìm thấy ${r.itemsFound ?? 0} bài, ${r.newItems ?? 0} bài mới`;
-  const err = r.errorMessage ? ` (${r.errorMessage})` : '';
-  return `${name}: ${status}${counts}.${err}`;
+/** Sau khi xếp hàng cào, tải lại "lần cào cuối" mỗi 5 giây trong 3 phút để thấy kết quả. */
+const WATCH_MS = 3 * 60 * 1000;
+/** Thông báo sau khi xếp hàng: nguồn nào đã vào hàng đợi, nguồn nào đã có việc chờ sẵn. */
+function describeQueued(data, nameOf) {
+  const queued = (data?.queued ?? []).map(nameOf);
+  const already = (data?.alreadyQueued ?? []).map(nameOf);
+  const parts = [];
+  if (queued.length) parts.push(`Đã xếp hàng cào: ${queued.join(', ')}.`);
+  if (already.length) parts.push(`Đang chờ cào sẵn: ${already.join(', ')}.`);
+  parts.push('Kết quả sẽ hiện ở dòng "lần cào cuối" của từng nguồn.');
+  return parts.join(' ');
 }
 
 // Tabs
@@ -48,7 +51,13 @@ const telegramPayload = (c) => ({
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
   // Lần cào gần nhất của từng nguồn (hiển thị trên thẻ crawler).
-  const runs = useQuery({ queryKey: ['dash', 'summary', 'setting-runs'], queryFn: () => dashboardApi.summary({}).then((r) => r.data.sources) });
+  // Theo dõi kết quả sau khi xếp hàng cào (worker chạy nền).
+  const [watchUntil, setWatchUntil] = useState(0);
+  const runs = useQuery({
+    queryKey: ['dash', 'summary', 'setting-runs'],
+    queryFn: () => dashboardApi.summary({}).then((r) => r.data.sources),
+    refetchInterval: () => (Date.now() < watchUntil ? 5000 : false),
+  });
 
   // Data states
   const [crawlers, setCrawlers] = useState([]);
@@ -135,17 +144,22 @@ export default function Setting() {
   };
 
   // Crawl execution
-  // Cào ngay một nguồn, không mở popup; kết quả hiện ở thanh thông báo.
+  const nameOf = (id) => crawlers.find((c) => c.id === id)?.name || id;
+  const watchResults = () => {
+    setWatchUntil(Date.now() + WATCH_MS);
+    runs.refetch();
+  };
+
+  // "Cào ngay": xếp hàng một nguồn; worker cào nền, kết quả hiện ở dòng "lần cào cuối".
   const runCrawl = async (crawler) => {
     if (!crawler || runningId) return;
     setRunningId(crawler.id);
-    setStatusMessage(`Đang cào ${crawler.name}...`);
     try {
       const response = await settingsApi.runCrawlerById(crawler.id);
-      setStatusMessage(describeCrawl(crawler.name, response.data));
-      runs.refetch();
+      setStatusMessage(describeQueued(response.data, nameOf));
+      watchResults();
     } catch (err) {
-      setStatusMessage(err.response?.data?.message || `Cào ${crawler.name} thất bại.`);
+      setStatusMessage(err.response?.data?.message || `Xếp hàng cào ${crawler.name} thất bại.`);
     } finally {
       setRunningId(null);
     }
@@ -154,8 +168,9 @@ export default function Setting() {
   const handleRunAllCrawlers = async () => {
     setCrawlLoading(true);
     try {
-      await settingsApi.runAllCrawlers();
-      setStatusMessage('Đã kích hoạt cào dữ liệu cho tất cả các đối thủ!');
+      const response = await settingsApi.runAllCrawlers();
+      setStatusMessage(describeQueued(response.data, nameOf));
+      watchResults();
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Cào tất cả thất bại.');
     } finally {

@@ -26,7 +26,7 @@ export default function CrawlerTab({
             {crawlLoading ? (
               <>
                 <Loader2 size={13} className="animate-spin text-blue-600" />
-                <span>Đang cào tất cả...</span>
+                <span>Đang xếp hàng...</span>
               </>
             ) : (
               <>
@@ -77,7 +77,7 @@ export default function CrawlerTab({
                   className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-medium flex items-center gap-1 transition cursor-pointer border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {runningId === c.id ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-                  {runningId === c.id ? 'Đang cào...' : 'Cào ngay'}
+                  {runningId === c.id ? 'Đang xếp hàng...' : 'Cào ngay'}
                 </button>
                 <button
                   onClick={() => onEditCrawler(c)}

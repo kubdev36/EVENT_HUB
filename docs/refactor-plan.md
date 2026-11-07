@@ -303,6 +303,16 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Đảm bảo "ít nhất một lần": nếu tiến trình chết sau khi Telegram đã nhận nhưng trước khi đánh dấu `sent`, thông báo có thể bị gửi lại một lần.
 - Test trên Postgres thật: `notification-outbox.service.db.spec.ts` (chạy khi có `DASHBOARD_TEST_DB`).
 
+### Giai đoạn 4: hàng đợi pg-boss và worker (A3, 08/11/2026)
+
+- Thư viện `pg-boss@12.38.0` (hàng đợi trong Postgres, schema `pgboss` do thư viện tự tạo và nâng cấp; không thêm dịch vụ).
+- `PROCESS_ROLE`: `api` chỉ phục vụ HTTP và đẩy việc; `worker` (`src/worker.ts`, `npm run start:worker`) chạy lịch, cào và gửi thông báo, không mở cổng; `all` (mặc định) làm cả hai cho dev. Docker Compose có service `worker`; backend chạy migration, worker đặt `DB_MIGRATIONS_RUN=false`.
+- Hàng đợi `crawl-source`, chính sách `stately` với `singletonKey` = id nguồn: mỗi nguồn tối đa một việc chờ và một việc chạy (bấm nhiều lần không tạo trùng). Việc chạy quá 20 phút coi như chết và được chạy lại (tối đa 2 lần, có giãn cách). Cấu hình hàng đợi được áp lại mỗi lần khởi động.
+- Cron 15 phút đẩy nguồn đến hạn vào hàng đợi; cron mỗi phút gửi thông báo từ outbox. Nút "Cào ngay" / "Cào tất cả" chỉ xếp hàng; giao diện tải lại "lần cào cuối" mỗi 5 giây trong 3 phút.
+- Tắt tiến trình: `enableShutdownHooks`, pg-boss dừng nhận việc và chờ việc đang chạy tối đa 30 giây.
+- Kiểm chứng (DB tạm): API đẩy việc khi không có worker thì việc nằm chờ, API không cào; bật worker thì việc được cào và hoàn tất. Test `crawl-queue.service.db.spec.ts`: worker chết giữa chừng thì worker khác chạy lại việc.
+- Sự cố khi kiểm chứng: tiến trình thử nghiệm đọc `telegram_bot_token` thật trong `event_hub_be/.env` và gửi 13 tin Telegram thật (bài Thế giới di động) vào nhóm. Từ nay chạy thử phải đặt rỗng `telegram_bot_token` và `telegram_chat_id`.
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

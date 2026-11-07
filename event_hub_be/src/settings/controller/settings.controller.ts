@@ -10,7 +10,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import { Role } from '../../auth/enums/role.enum.js';
 import { Roles } from '../../auth/decorators/roles.decorator.js';
-import { CrawlerService } from '../../crawlers/service/crawler.service.js';
+import { CrawlQueueService } from '../../queue/crawl-queue.service.js';
 import { SaveCrawlerSourcesDto } from '../dto/crawler-sources.dto.js';
 import { SaveKeywordRulesDto } from '../dto/keyword-rules.dto.js';
 import { RunCrawlerDto } from '../dto/run-crawler.dto.js';
@@ -24,7 +24,7 @@ import { SettingsService } from '../service/settings.service.js';
 export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
-    private readonly crawlerService: CrawlerService,
+    private readonly queue: CrawlQueueService,
   ) {}
 
   @Get()
@@ -196,7 +196,7 @@ export class SettingsController {
   })
   async triggerCrawl(@Body() body: RunCrawlerDto) {
     const target = await this.settingsService.getCrawlerTarget(body.id);
-    return this.crawlerService.crawlSource(target);
+    return { status: 'queued', ...(await this.queue.enqueue([target.id])) };
   }
 
   @Post('crawler/run/:id')
@@ -205,6 +205,7 @@ export class SettingsController {
   @ApiParam({ name: 'id', type: String })
   async triggerCrawlByParam(@Param('id') id: string) {
     const target = await this.settingsService.getCrawlerTarget(id);
-    return this.crawlerService.crawlSource(target);
+    // Chỉ xếp hàng; worker cào và ghi kết quả vào crawler_runs.
+    return { status: 'queued', ...(await this.queue.enqueue([target.id])) };
   }
 }

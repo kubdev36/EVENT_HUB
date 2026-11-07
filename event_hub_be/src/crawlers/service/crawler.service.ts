@@ -100,16 +100,27 @@ export class CrawlerService implements OnApplicationBootstrap {
     return this.crawlMany(targets);
   }
 
-  /** Cron: chỉ cào nguồn đang bật và đã đến hạn theo interval. */
-  async crawlDueTargets(now = new Date()): Promise<CrawlResult[]> {
+  /** Nguồn đang bật và đã đến hạn theo interval (dọn lượt cào bị kẹt trước). */
+  async findDueTargets(now = new Date()): Promise<CrawlTarget[]> {
     await this.failStaleRuns(now);
     const targets = (await this.sources.getTargets()).filter(
       (target) => target.enabled !== false,
     );
     const lastRuns = await this.getLastRunStarts(targets.map((t) => t.id));
-    const due = targets.filter((t) =>
-      isDue(t.interval, lastRuns.get(t.id), now),
+    return targets.filter((t) => isDue(t.interval, lastRuns.get(t.id), now));
+  }
+
+  /** Nguồn đang bật (dùng cho "Cào tất cả"). */
+  async enabledTargets(): Promise<CrawlTarget[]> {
+    return (await this.sources.getTargets()).filter(
+      (target) => target.enabled !== false,
     );
+  }
+
+  /** Cào ngay các nguồn đến hạn trong tiến trình hiện tại (không qua hàng đợi). */
+  async crawlDueTargets(now = new Date()): Promise<CrawlResult[]> {
+    const targets = await this.enabledTargets();
+    const due = await this.findDueTargets(now);
     if (due.length === 0) return [];
     this.logger.log(
       `Cào ${due.length}/${targets.length} nguồn đến hạn: ${due.map((t) => t.id).join(', ')}`,

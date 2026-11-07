@@ -30,6 +30,8 @@ process.on('unhandledRejection', (reason) => {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Tắt tiến trình (SIGTERM/SIGINT) thì chạy các hook dọn dẹp, vd. pg-boss chờ việc đang chạy.
+  app.enableShutdownHooks();
   const isProduction = process.env.NODE_ENV === 'production';
 
   // CSP mặc định của helmet chặn script inline của Swagger UI, nên chỉ tắt CSP khi có /docs (dev).
