@@ -4,6 +4,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { ChevronLeft, ChevronRight, ChevronDown, X, ExternalLink, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { useRangeEvents } from '../API/useDashboardEvents';
+import DayEventsModal from './month/DayEventsModal';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -269,60 +270,15 @@ export default function Month() {
       )}
 
       {selectedDayEvents && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-4 flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center pb-2.5 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-xs sm:text-sm">Sự kiện ngày {selectedDayEvents.date}</h3>
-              <button onClick={() => setSelectedDayEvents(null)} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto my-3 flex flex-col gap-2">
-              {selectedDayEvents.events.map((ev) => {
-                const style = CATEGORY_STYLES[ev.type] || CATEGORY_STYLES.promo;
-                return (
-                  <div
-                    key={ev.id}
-                    onClick={() => {
-                      setSelectedDayEvents(null);
-                      setSelectedEvent(ev);
-                    }}
-                    className="p-2.5 border border-gray-200 rounded-xl hover:border-blue-400 cursor-pointer text-xs transition bg-white hover:bg-gray-50 shadow-2xs space-y-1.5"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-1.5">
-                        {ev.logo && (
-                          <img
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            src={ev.logo}
-                            alt={ev.brand}
-                            className="w-4 h-4 object-contain rounded-full bg-white border border-gray-200"
-                          />
-                        )}
-                        <span className="font-bold text-gray-800">{ev.brand}</span>
-                      </div>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${style.pill}`}>{style.label}</span>
-                    </div>
-
-                    <div className="text-gray-700 leading-snug flex items-center gap-1.5">
-                      <span className="font-bold text-gray-500 text-[10px] shrink-0">{ev.time}</span>
-                      <span className="truncate font-medium">{ev.title}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => setSelectedDayEvents(null)}
-              className="w-full py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition cursor-pointer"
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
+        <DayEventsModal
+          date={selectedDayEvents.date}
+          events={selectedDayEvents.events}
+          onClose={() => setSelectedDayEvents(null)}
+          onSelect={(ev) => {
+            setSelectedDayEvents(null);
+            setSelectedEvent(ev);
+          }}
+        />
       )}
     </div>
   );
