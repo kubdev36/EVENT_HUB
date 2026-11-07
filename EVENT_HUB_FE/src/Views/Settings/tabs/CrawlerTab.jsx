@@ -51,6 +51,8 @@ export default function CrawlerTab({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <img
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                   src={c.logo || '/img/mtm.jpg'}
                   alt={c.name}
                   onError={(e) => {

@@ -14,6 +14,8 @@ export default function EventCard({ data, onOpenDetail }) {
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <img
+            loading="lazy"
+            referrerPolicy="no-referrer"
             src={logoUrl}
             alt={data.name}
             onError={(e) => {
@@ -79,7 +81,7 @@ export default function EventCard({ data, onOpenDetail }) {
                 <div className="h-24 sm:h-20 w-full rounded-md overflow-hidden bg-slate-50 border border-slate-100 shrink-0 select-none flex items-center justify-center">
                   {event.image ? (
                     <img
-                      src={getOptimizedImageUrl(event.image, 300)}
+                      src={getOptimizedImageUrl(event.image)}
                       alt={event.title}
                       referrerPolicy="no-referrer"
                       onError={(e) => {
@@ -92,6 +94,8 @@ export default function EventCard({ data, onOpenDetail }) {
                     />
                   ) : (
                     <img
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                       src={logoUrl}
                       alt={data.name}
                       className="w-9 h-9 object-contain opacity-50 p-0.5 bg-white rounded"

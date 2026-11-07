@@ -206,6 +206,8 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                   className="flex items-center gap-2.5 px-1 py-1 rounded-md hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700 transition"
                 >
                   <img
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
                     src={item.logo || '/img/mtm.jpg'}
                     alt={item.name}
                     onError={(e) => {

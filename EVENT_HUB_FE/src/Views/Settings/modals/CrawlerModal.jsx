@@ -126,6 +126,8 @@ export default function CrawlerModal({
               {formData.logo ? (
                 <div className="relative group shrink-0">
                   <img
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
                     src={formData.logo}
                     alt="Logo preview"
                     onError={(e) => {

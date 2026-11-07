@@ -276,6 +276,7 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Chạy sau mỗi lần cào một nguồn, không làm chậm hay hỏng lần cào; mỗi lần tối đa 50 bài chưa thử lưu, bài mới trước, nên ảnh bài cũ được lưu dần. Kết quả ghi vào `imageStoreStatus` (`stored`, `failed`, `blocked`, `skipped`). Bài `failed` chưa tự thử lại.
 - Nguồn `facebook` mặc định không lưu ảnh (`skipped`) đến khi xem xong điều khoản của Meta; cấu hình nguồn `storeImages` ghi đè mặc định.
 - `GET /images/:name` không cần đăng nhập (thẻ `<img>` không gửi token; tên file khó đoán, ảnh vốn công khai). Chuyển sang bắt đăng nhập khi có cookie httpOnly. API `/dashboard/events` trả thêm `imageLocal`; frontend ưu tiên ảnh đã lưu, không có thì dùng link gốc.
+- Bỏ proxy wsrv.nl (08/11/2026): frontend không gửi link ảnh ra dịch vụ ngoài; ảnh chưa lưu tải thẳng từ web nguồn với `referrerPolicy="no-referrer"` (đối thủ không thấy địa chỉ Event Hub) và `loading="lazy"`.
 - Migration `AddEventImageStore` thêm 3 cột; đã thử trên DB tạm (chạy, so schema với entity, hoàn tác, chạy lại).
 
 ### Bảo mật nhóm "Sau go-live" (08/11/2026)

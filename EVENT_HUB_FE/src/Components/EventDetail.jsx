@@ -46,6 +46,8 @@ export default function EventDetail({ data, onClose }) {
 
           <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-100 flex items-center gap-3">
             <img
+              loading="lazy"
+              referrerPolicy="no-referrer"
               src={logoUrl}
               alt={data.name}
               onError={(e) => {
@@ -140,6 +142,7 @@ export default function EventDetail({ data, onClose }) {
                       alt={event.title}
                       className="w-full max-h-48 sm:max-h-56 object-contain rounded-lg transition duration-200 group-hover:scale-[1.01]"
                       loading="lazy"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                 )}
@@ -156,6 +159,7 @@ export default function EventDetail({ data, onClose }) {
                           alt="Thumbnail"
                           className="w-full h-full object-cover"
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                         />
                       </div>
                     ))}

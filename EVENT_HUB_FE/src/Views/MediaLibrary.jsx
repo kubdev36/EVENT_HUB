@@ -204,6 +204,7 @@ export default function MediaLibrary() {
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300 ease-out"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
 
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 sm:p-2.5 flex flex-col justify-between">
@@ -253,6 +254,8 @@ export default function MediaLibrary() {
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               {currentPhoto.brandLogo && (
                 <img
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                   src={currentPhoto.brandLogo}
                   alt={currentPhoto.brandName}
                   className="w-6 h-6 object-contain rounded-full bg-white p-0.5 shrink-0"
@@ -294,6 +297,8 @@ export default function MediaLibrary() {
             )}
 
             <img
+              loading="lazy"
+              referrerPolicy="no-referrer"
               src={currentPhoto.image}
               alt={currentPhoto.title}
               className="max-h-[60vh] sm:max-h-[75vh] max-w-full object-contain rounded-lg sm:rounded-xl shadow-2xl transition duration-200"

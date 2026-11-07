@@ -155,6 +155,8 @@ export default function Month() {
                       
                       {ev.logo && (
                         <img
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
                           src={ev.logo}
                           alt={ev.brand}
                           className="w-3 h-3 sm:w-3.5 sm:h-3.5 object-contain rounded-full bg-white shrink-0 border border-gray-200 shadow-2xs"
@@ -192,6 +194,8 @@ export default function Month() {
             {selectedEvent.image && (
               <div className="relative w-full h-40 sm:h-48 bg-gray-100 overflow-hidden shrink-0 border-b border-gray-100">
                 <img
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                   src={selectedEvent.image}
                   alt={selectedEvent.title}
                   className="w-full h-full object-cover"
@@ -218,6 +222,8 @@ export default function Month() {
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 rounded-md border border-gray-200">
                   {selectedEvent.logo && (
                     <img
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                       src={selectedEvent.logo}
                       alt={selectedEvent.brand}
                       className="w-4 h-4 object-contain rounded-full bg-white"
@@ -288,6 +294,8 @@ export default function Month() {
                       <div className="flex items-center gap-1.5">
                         {ev.logo && (
                           <img
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
                             src={ev.logo}
                             alt={ev.brand}
                             className="w-4 h-4 object-contain rounded-full bg-white border border-gray-200"
