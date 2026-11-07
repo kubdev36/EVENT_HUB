@@ -1,13 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { ClassifierService } from '../../classifier/classifier.service.js';
 import { Event } from '../../events/entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
 import { TelegramService } from '../../telegram/telegram.service.js';
-import { CrawlSource, CrawlTarget, KeywordRule, ParsedCrawlItem } from '../crawler.types.js';
-import { CrawlerRun } from '../entity/crawler-run.entity.js';
-import { CrawlerHttpClient } from '../engine/crawler-http.client.js';
+import {
+  CrawlSource,
+  CrawlTarget,
+  KeywordRule,
+  ParsedCrawlItem,
+} from '../crawler.types.js';
+import { CrawlerRun, CrawlerRunStatus } from '../entity/crawler-run.entity.js';
+import {
+  CrawlerHttpClient,
+  CrawlFetchError,
+} from '../engine/crawler-http.client.js';
 import { GenericRssEngine } from '../engine/generic-rss.engine.js';
 import { GenericApiEngine } from '../engine/generic-api.engine.js';
 import { GenericHtmlEngine } from '../engine/generic-html.engine.js';
@@ -16,8 +24,15 @@ import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
 
+/** Event có ngày đăng trước mốc này bị bỏ qua (dữ liệu cũ). */
+const MIN_EVENT_DATE = new Date('2025-01-01T00:00:00+07:00');
+
 @Injectable()
 export class CrawlerService {
+  private readonly logger = new Logger(CrawlerService.name);
+  /** Nghỉ giữa các URL của cùng một nguồn. */
+  urlDelayMs = 500;
+
   constructor(
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
@@ -31,32 +46,59 @@ export class CrawlerService {
     private readonly apiEngine: GenericApiEngine,
     private readonly htmlEngine: GenericHtmlEngine,
     private readonly metaAdsEngine: GenericMetaAdsEngine,
+    private readonly httpClient: CrawlerHttpClient,
   ) {}
 
-  async notifyPendingEvents() {
+  /**
+   * Gửi Telegram cho event chưa thông báo. Chỉ gán notifiedAt khi Telegram xác nhận gửi thành công;
+   * gửi lỗi thì event vẫn chờ để lần sau gửi lại. Event chưa rõ ngày đăng không được gửi.
+   */
+  async notifyPendingEvents(pauseMs = 800) {
     const unnotifiedEvents = await this.eventRepository.find({
-      where: { notifiedAt: IsNull() },
+      where: { notifiedAt: IsNull(), dateUnknown: false },
       order: { createdAt: 'ASC' },
       take: 50,
     });
 
+    const summary = { sent: 0, failed: 0, skipped: false };
     for (const event of unnotifiedEvents) {
-      await this.notifyTelegram(event);
-      event.notifiedAt = new Date();
-      await this.eventRepository.save(event);
-      // Gentle pause to avoid Telegram rate-limiting
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const outcome = await this.notifyTelegram(event);
+      if (outcome === 'skipped') {
+        // Chưa cấu hình hoặc đang tắt: dừng, giữ nguyên các event chờ.
+        summary.skipped = true;
+        break;
+      }
+      if (outcome === 'sent') {
+        event.notifiedAt = new Date();
+        await this.eventRepository.save(event);
+        summary.sent += 1;
+      } else {
+        summary.failed += 1;
+      }
+      // Nghỉ giữa các lần gửi để tránh bị Telegram giới hạn tốc độ
+      if (pauseMs > 0)
+        await new Promise((resolve) => setTimeout(resolve, pauseMs));
     }
+    if (summary.failed > 0) {
+      this.logger.warn(
+        `Telegram: ${summary.failed} event gửi lỗi, sẽ thử lại lần sau.`,
+      );
+    }
+    return summary;
   }
 
   async crawlAllTargets() {
-    const targets = (await this.getCrawlerTargets()).filter((target) => target.enabled !== false);
+    const targets = (await this.getCrawlerTargets()).filter(
+      (target) => target.enabled !== false,
+    );
     const results = [];
     for (const target of targets) {
       const res = await this.crawlTargetSafely(target);
       results.push(res);
       // Gentle delay between targets (2-3s) to prevent IP rate-limiting & WAF flags
-      await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 1000));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000 + Math.random() * 1000),
+      );
     }
     return results;
   }
@@ -86,6 +128,8 @@ export class CrawlerService {
   }
 
   async crawlTarget(target: CrawlTarget) {
+    const startedMs = Date.now();
+    const requestsBefore = this.httpClient.requestCount;
     const run = await this.crawlerRunRepository.save(
       this.crawlerRunRepository.create({
         sourceId: target.id,
@@ -99,7 +143,11 @@ export class CrawlerService {
     );
 
     try {
-      const rawItems = await this.fetchItemsFromTarget(target);
+      const {
+        items: rawItems,
+        errors,
+        attempts,
+      } = await this.fetchItemsFromTarget(target);
       const rules = await this.getKeywordRules();
       const seen = new Set<string>();
       let newItemsCount = 0;
@@ -108,20 +156,38 @@ export class CrawlerService {
       const validItems: ParsedCrawlItem[] = [];
       for (const item of rawItems) {
         const cleanUrl = UrlNormalizerHelper.normalizeUrl(item.url);
-        if (!cleanUrl || seen.has(cleanUrl) || NoiseFilterHelper.isNoiseTitle(item.title)) continue;
+        if (
+          !cleanUrl ||
+          seen.has(cleanUrl) ||
+          NoiseFilterHelper.isNoiseTitle(item.title)
+        )
+          continue;
         seen.add(cleanUrl);
         validItems.push(item);
       }
 
       for (const item of validItems) {
-        const type = this.classifierService.classify(item.title, item.description || '', rules);
+        const type = this.classifierService.classify(
+          item.title,
+          item.description || '',
+          rules,
+        );
         if (!type) continue;
 
         const dateInfo = DateExtractorHelper.parseItemEventDate(item);
 
-        const contentHash = UrlNormalizerHelper.buildContentHash(target.id, item.url, item.title);
+        const contentHash = UrlNormalizerHelper.buildContentHash(
+          target.id,
+          item.url,
+          item.title,
+        );
+        const externalId = item.externalId ?? null;
         const existing = await this.eventRepository.findOne({
-          where: [{ sourceId: target.id, url: item.url }, { sourceId: target.id, contentHash }],
+          where: [
+            ...(externalId ? [{ sourceId: target.id, externalId }] : []),
+            { sourceId: target.id, url: item.url },
+            { sourceId: target.id, contentHash },
+          ],
         });
 
         if (existing) {
@@ -132,18 +198,28 @@ export class CrawlerService {
             existing.image = item.image;
           }
           // Only update eventDate if we found an explicit real date from this item
-          if (dateInfo.isExplicit && dateInfo.date && !isNaN(dateInfo.date.getTime())) {
+          if (
+            dateInfo.isExplicit &&
+            dateInfo.date &&
+            !isNaN(dateInfo.date.getTime())
+          ) {
             existing.eventDate = dateInfo.date;
             existing.eventTime = dateInfo.time || existing.eventTime;
+            existing.dateUnknown = false;
           }
+          if (externalId && !existing.externalId)
+            existing.externalId = externalId;
           existing.type = type;
           await this.eventRepository.save(existing);
           continue;
         }
 
-        // Create new Event
-        const eventDate = dateInfo.date || new Date();
-        if (eventDate < new Date('2025-01-01')) continue;
+        // Không tìm được ngày đăng thì để trống và đánh dấu dateUnknown, không dùng ngày crawl.
+        const eventDate =
+          dateInfo.date && !isNaN(dateInfo.date.getTime())
+            ? dateInfo.date
+            : null;
+        if (eventDate && eventDate < MIN_EVENT_DATE) continue;
 
         const newEvent = this.eventRepository.create({
           sourceId: target.id,
@@ -152,10 +228,15 @@ export class CrawlerService {
           sourceUrl: (item.rawData?.sourceUrl as string) || item.url,
           title: item.title,
           description: item.description ?? null,
-          image: item.image && !NoiseFilterHelper.isNoiseImage(item.image) ? item.image : null,
+          image:
+            item.image && !NoiseFilterHelper.isNoiseImage(item.image)
+              ? item.image
+              : null,
           url: item.url,
           eventDate,
-          eventTime: dateInfo.time || '09:00',
+          eventTime: eventDate ? dateInfo.time : null,
+          dateUnknown: !eventDate,
+          externalId,
           type,
           rawData: item.rawData ?? null,
           contentHash,
@@ -164,14 +245,21 @@ export class CrawlerService {
           notifiedAt: null,
         });
 
-        const savedEvent = await this.eventRepository.save(newEvent);
+        await this.eventRepository.save(newEvent);
         newItemsCount += 1;
       }
 
-      run.status = 'success';
+      const status = CrawlerService.resolveRunStatus(errors, attempts);
+      run.status = status;
+      run.errorMessage = errors.length
+        ? errors
+            .map((e) => e.message)
+            .join('; ')
+            .slice(0, 2000)
+        : null;
       run.itemsFound = validItems.length;
       run.newItems = newItemsCount;
-      run.finishedAt = new Date();
+      this.finishRun(run, startedMs, requestsBefore);
       await this.crawlerRunRepository.save(run);
 
       return {
@@ -180,30 +268,106 @@ export class CrawlerService {
         type: target.type || 'web',
         itemsFound: validItems.length,
         newItems: newItemsCount,
-        status: 'success',
+        status,
+        ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
       };
     } catch (error) {
       run.status = 'failed';
-      run.errorMessage = error instanceof Error ? error.message : 'Unknown crawler error';
-      run.finishedAt = new Date();
+      run.errorMessage =
+        error instanceof Error ? error.message : 'Unknown crawler error';
+      this.finishRun(run, startedMs, requestsBefore);
       await this.crawlerRunRepository.save(run);
       throw error;
     }
   }
 
-  private async fetchItemsFromTarget(target: CrawlTarget): Promise<ParsedCrawlItem[]> {
+  /**
+   * success: không URL nào lỗi; partial: một phần lỗi; blocked: mọi phần đều bị chặn;
+   * failed: mọi phần đều lỗi (có ít nhất một lỗi không phải bị chặn).
+   */
+  static resolveRunStatus(
+    errors: CrawlFetchError[],
+    attempts: number,
+  ): CrawlerRunStatus {
+    if (errors.length === 0) return 'success';
+    if (errors.length < attempts) return 'partial';
+    return errors.every((e) => e.kind === 'blocked') ? 'blocked' : 'failed';
+  }
+
+  private finishRun(
+    run: CrawlerRun,
+    startedMs: number,
+    requestsBefore: number,
+  ) {
+    run.finishedAt = new Date();
+    run.durationMs = Date.now() - startedMs;
+    run.requestCount = this.httpClient.requestCount - requestsBefore;
+    // Log JSON một dòng để đo baseline (thời gian, số request, số item theo nguồn).
+    this.logger.log(
+      JSON.stringify({
+        event: 'crawl_run',
+        runId: run.id,
+        sourceId: run.sourceId,
+        status: run.status,
+        durationMs: run.durationMs,
+        requestCount: run.requestCount,
+        itemsFound: run.itemsFound,
+        newItems: run.newItems,
+      }),
+    );
+  }
+
+  private async fetchItemsFromTarget(
+    target: CrawlTarget,
+  ): Promise<{
+    items: ParsedCrawlItem[];
+    errors: CrawlFetchError[];
+    attempts: number;
+  }> {
     const allItems: ParsedCrawlItem[] = [];
+    const errors: CrawlFetchError[] = [];
+    let attempts = 0;
 
-    // 1. Fetch from Generic API / GraphQL Engine if applicable
-    const apiItems = await this.apiEngine.fetchApiItems(target);
-    allItems.push(...apiItems);
+    // Mỗi phần (API, từng URL) lỗi riêng; phần lỗi được ghi lại thay vì bị bỏ qua im lặng.
+    const attempt = async (
+      label: string,
+      fn: () => Promise<ParsedCrawlItem[]>,
+    ) => {
+      attempts += 1;
+      try {
+        allItems.push(...(await fn()));
+      } catch (err) {
+        if (!(err instanceof CrawlFetchError)) {
+          this.logger.warn(
+            `Lỗi không mong đợi khi crawl ${label}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        errors.push(
+          err instanceof CrawlFetchError
+            ? err
+            : new CrawlFetchError(
+                'failed',
+                label,
+                err instanceof Error ? err.message : String(err),
+              ),
+        );
+      }
+    };
 
-    // 2. Fetch all configured target URLs
+    // 1. API / GraphQL nếu nguồn có cấu hình
+    if (this.apiEngine.appliesTo(target)) {
+      await attempt(`api:${target.id}`, () =>
+        this.apiEngine.fetchApiItems(target),
+      );
+    }
+
+    // 2. Các URL đã cấu hình
     for (let url of target.targetUrls || []) {
       url = url.trim();
       if (!url) continue;
 
-      const isFacebook = url.includes('facebook.com') || url.includes('ads/library');
+      const isFacebook =
+        url.includes('facebook.com') || url.includes('ads/library');
       const isRssOrXml =
         url.includes('.rss') ||
         url.includes('.xml') ||
@@ -211,23 +375,25 @@ export class CrawlerService {
         url.includes('format=Atom') ||
         url.includes('format=Mrss');
 
+      const targetUrl = url;
       if (isFacebook) {
-        // Meta Ad Library Engine (100% active campaigns & dark ads, zero account risk)
-        const metaAdItems = await this.metaAdsEngine.fetchActiveAds(url);
-        allItems.push(...metaAdItems);
+        await attempt(targetUrl, () =>
+          this.metaAdsEngine.fetchActiveAds(targetUrl),
+        );
       } else if (isRssOrXml) {
-        // Generic RSS / Google News Sitemap Engine
-        const rssItems = await this.rssEngine.fetchRssOrSitemap(url);
-        allItems.push(...rssItems);
+        await attempt(targetUrl, () =>
+          this.rssEngine.fetchRssOrSitemap(targetUrl),
+        );
       } else {
-        // Generic HTML Engine
-        const htmlItems = await this.htmlEngine.fetchHtmlItems(url);
-        allItems.push(...htmlItems);
+        await attempt(targetUrl, () =>
+          this.htmlEngine.fetchHtmlItems(targetUrl),
+        );
       }
-      await new Promise((r) => setTimeout(r, 500));
+      if (this.urlDelayMs > 0)
+        await new Promise((r) => setTimeout(r, this.urlDelayMs));
     }
 
-    return allItems;
+    return { items: allItems, errors, attempts };
   }
 
   private async crawlTargetSafely(target: CrawlTarget) {
@@ -241,17 +407,23 @@ export class CrawlerService {
         itemsFound: 0,
         newItems: 0,
         status: 'failed',
-        errorMessage: error instanceof Error ? error.message : 'Unknown crawler error',
+        errorMessage:
+          error instanceof Error ? error.message : 'Unknown crawler error',
       };
     }
   }
 
   private async getCrawlerTargets(): Promise<CrawlTarget[]> {
-    const setting = await this.settingRepository.findOne({ where: { key: 'crawler_sources' } });
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'crawler_sources' },
+    });
     if (!setting?.value) return [];
     if (Array.isArray(setting.value)) return setting.value as CrawlTarget[];
     if (typeof setting.value === 'object') {
-      const obj = setting.value as { targets?: CrawlTarget[]; sources?: CrawlTarget[] };
+      const obj = setting.value as {
+        targets?: CrawlTarget[];
+        sources?: CrawlTarget[];
+      };
       if (Array.isArray(obj.targets)) return obj.targets;
       if (Array.isArray(obj.sources)) return obj.sources;
     }
@@ -266,35 +438,82 @@ export class CrawlerService {
   }
 
   private async getKeywordRules(): Promise<KeywordRule[]> {
-    const setting = await this.settingRepository.findOne({ where: { key: 'keyword_rules' } });
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'keyword_rules' },
+    });
     const value = setting?.value;
     if (Array.isArray(value)) return value as KeywordRule[];
-    if (value && typeof value === 'object' && Array.isArray((value as { rules?: unknown[] }).rules)) {
+    if (
+      value &&
+      typeof value === 'object' &&
+      Array.isArray((value as { rules?: unknown[] }).rules)
+    ) {
       return (value as { rules: KeywordRule[] }).rules;
     }
     return [];
   }
 
-  private async notifyTelegram(event: Event) {
-    try {
-      const formattedDate = event.eventDate
-        ? new Date(event.eventDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        : '';
+  /** Nội dung crawl không đáng tin: escape HTML, chỉ đưa link http(s) vào tin nhắn. */
+  static buildTelegramMessage(event: Event): string {
+    const formattedDate = event.eventDate
+      ? new Date(event.eventDate).toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          timeZone: 'Asia/Ho_Chi_Minh',
+        })
+      : '';
+    const safeUrl = /^https?:\/\//i.test(event.url || '') ? event.url : '';
 
-      const lines = [
-        '<b>🔔 SỰ KIỆN ĐỐI THỦ MỚI</b>',
-        `<b>Thương hiệu:</b> ${event.sourceName}`,
-        `<b>Tiêu đề:</b> ${event.title}`,
-        `<b>Loại sự kiện:</b> ${event.type}`,
-        formattedDate ? `<b>Thời gian:</b> ${formattedDate}` : '',
-        `<b>Chi tiết:</b> ${event.url}`,
-      ];
-      const msg = lines.filter(Boolean).join('\n');
-      if (event.image) {
-        await this.telegramService.sendPhoto(event.image, msg);
-      } else {
-        await this.telegramService.sendMessage(msg);
-      }
-    } catch {}
+    const lines = [
+      '<b>🔔 SỰ KIỆN ĐỐI THỦ MỚI</b>',
+      `<b>Thương hiệu:</b> ${escapeHtml(event.sourceName)}`,
+      `<b>Tiêu đề:</b> ${escapeHtml(event.title)}`,
+      `<b>Loại sự kiện:</b> ${escapeHtml(event.type)}`,
+      formattedDate ? `<b>Thời gian:</b> ${formattedDate}` : '',
+      safeUrl ? `<b>Chi tiết:</b> ${escapeHtml(safeUrl)}` : '',
+    ];
+    return lines.filter(Boolean).join('\n');
   }
+
+  private async notifyTelegram(
+    event: Event,
+  ): Promise<'sent' | 'failed' | 'skipped'> {
+    const msg = CrawlerService.buildTelegramMessage(event);
+    try {
+      const image =
+        event.image && /^https?:\/\//i.test(event.image) ? event.image : null;
+      let response: TelegramResponse = image
+        ? await this.telegramService.sendPhoto(image, msg)
+        : await this.telegramService.sendMessage(msg);
+      if (response?.skipped) return 'skipped';
+      if (!response?.ok && image) {
+        // Ảnh hỏng hoặc hết hạn: gửi lại dạng chữ để không mất thông báo.
+        this.logger.warn(
+          `Telegram sendPhoto lỗi cho event ${event.id}: ${response?.description ?? 'unknown'}; gửi dạng chữ.`,
+        );
+        response = await this.telegramService.sendMessage(msg);
+      }
+      if (response?.ok) return 'sent';
+      this.logger.warn(
+        `Telegram gửi lỗi cho event ${event.id}: ${response?.description ?? 'unknown'}`,
+      );
+      return 'failed';
+    } catch (err) {
+      this.logger.warn(
+        `Telegram gửi lỗi cho event ${event.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 'failed';
+    }
+  }
+}
+
+type TelegramResponse =
+  { ok?: boolean; skipped?: boolean; description?: string } | null | undefined;
+
+function escapeHtml(value: string | null | undefined): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

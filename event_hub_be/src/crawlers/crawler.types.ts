@@ -26,6 +26,8 @@ export type ParsedCrawlItem = {
   description?: string | null;
   image?: string | null;
   url: string;
+  /** ID ổn định phía nguồn (vd. adArchiveID) để dedupe khi nhiều item chung URL. */
+  externalId?: string | null;
   eventDate?: Date | null;
   eventTime?: string | null;
   score?: number;

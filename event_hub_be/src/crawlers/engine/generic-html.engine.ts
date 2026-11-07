@@ -12,8 +12,7 @@ export class GenericHtmlEngine {
   constructor(private readonly httpClient: CrawlerHttpClient) {}
 
   async fetchHtmlItems(url: string): Promise<ParsedCrawlItem[]> {
-    const resp = await this.httpClient.fetchHtml(url);
-    if (!resp?.html) return [];
+    const resp = await this.httpClient.requirePage(url);
 
     const $ = cheerio.load(resp.html);
     const items: ParsedCrawlItem[] = [];
@@ -32,20 +31,30 @@ export class GenericHtmlEngine {
     return items;
   }
 
-  private extractNextJsPayload(html: string, sourceUrl: string): ParsedCrawlItem[] {
+  private extractNextJsPayload(
+    html: string,
+    sourceUrl: string,
+  ): ParsedCrawlItem[] {
     const items: ParsedCrawlItem[] = [];
-    if (!html.includes('self.__next_f') && !html.includes('__NEXT_DATA__')) return items;
+    if (!html.includes('self.__next_f') && !html.includes('__NEXT_DATA__'))
+      return items;
 
     // Scan for JSON post objects in Next.js payloads
-    const matches = html.matchAll(/"title"\s*:\s*"([^"]{8,150})"[^}]*?"(slug|url)"\s*:\s*"([^"]+)"/g);
+    const matches = html.matchAll(
+      /"title"\s*:\s*"([^"]{8,150})"[^}]*?"(slug|url)"\s*:\s*"([^"]+)"/g,
+    );
     for (const match of matches) {
       const title = NoiseFilterHelper.cleanTitle(match[1]);
       const slugOrUrl = match[3];
-      if (!title || !slugOrUrl || NoiseFilterHelper.isNoiseTitle(title)) continue;
+      if (!title || !slugOrUrl || NoiseFilterHelper.isNoiseTitle(title))
+        continue;
 
       const fullUrl = slugOrUrl.startsWith('http')
         ? slugOrUrl
-        : UrlNormalizerHelper.resolveUrl(sourceUrl, slugOrUrl.startsWith('/') ? slugOrUrl : `/${slugOrUrl}`);
+        : UrlNormalizerHelper.resolveUrl(
+            sourceUrl,
+            slugOrUrl.startsWith('/') ? slugOrUrl : `/${slugOrUrl}`,
+          );
 
       items.push({
         title,
@@ -59,7 +68,10 @@ export class GenericHtmlEngine {
     return items;
   }
 
-  private extractFromEventBlocks($: cheerio.CheerioAPI, sourceUrl: string): ParsedCrawlItem[] {
+  private extractFromEventBlocks(
+    $: cheerio.CheerioAPI,
+    sourceUrl: string,
+  ): ParsedCrawlItem[] {
     const items: ParsedCrawlItem[] = [];
     const selectors = [
       'article',
@@ -80,24 +92,38 @@ export class GenericHtmlEngine {
       const titleText = titleNode.text().replace(/\s+/g, ' ').trim();
       const title = NoiseFilterHelper.cleanTitle(titleAttr || titleText);
 
-      const link = block.find('a[href]').first().attr('href') || block.attr('href');
+      const link =
+        block.find('a[href]').first().attr('href') || block.attr('href');
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
       const fullUrl = UrlNormalizerHelper.resolveUrl(sourceUrl, link);
       if (!UrlNormalizerHelper.isLikelyEventUrl(fullUrl)) return;
 
-      const img = block.find('img').first().attr('src') ||
-                  block.find('img').first().attr('data-src') ||
-                  block.find('img').first().attr('data-original') || null;
+      const img =
+        block.find('img').first().attr('src') ||
+        block.find('img').first().attr('data-src') ||
+        block.find('img').first().attr('data-original') ||
+        null;
 
-      const dateText = block.find('time, .date, .time, span[class*="date"]').first().text().trim();
+      const dateText = block
+        .find('time, .date, .time, span[class*="date"]')
+        .first()
+        .text()
+        .trim();
       const parsedDate = DateExtractorHelper.parsePublishedDate(dateText);
-      const desc = block.find('p, .desc, .summary, .description').first().text().trim();
+      const desc = block
+        .find('p, .desc, .summary, .description')
+        .first()
+        .text()
+        .trim();
 
       items.push({
         title,
         url: fullUrl,
-        image: img && !NoiseFilterHelper.isNoiseImage(img) ? UrlNormalizerHelper.resolveUrl(sourceUrl, img) : null,
+        image:
+          img && !NoiseFilterHelper.isNoiseImage(img)
+            ? UrlNormalizerHelper.resolveUrl(sourceUrl, img)
+            : null,
         description: NoiseFilterHelper.cleanDescription(desc),
         eventDate: parsedDate?.date || null,
         eventTime: parsedDate?.time || null,
@@ -108,14 +134,23 @@ export class GenericHtmlEngine {
     return items;
   }
 
-  private extractFromMetadata($: cheerio.CheerioAPI, sourceUrl: string): ParsedCrawlItem[] {
-    const title = $('meta[property="og:title"]').attr('content') || $('title').text().trim();
+  private extractFromMetadata(
+    $: cheerio.CheerioAPI,
+    sourceUrl: string,
+  ): ParsedCrawlItem[] {
+    const title =
+      $('meta[property="og:title"]').attr('content') ||
+      $('title').text().trim();
     const cleanTitle = NoiseFilterHelper.cleanTitle(title);
     if (!cleanTitle || NoiseFilterHelper.isNoiseTitle(cleanTitle)) return [];
 
-    const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || null;
+    const desc =
+      $('meta[property="og:description"]').attr('content') ||
+      $('meta[name="description"]').attr('content') ||
+      null;
     const image = $('meta[property="og:image"]').attr('content') || null;
-    const pubDate = $('meta[property="article:published_time"]').attr('content') || null;
+    const pubDate =
+      $('meta[property="article:published_time"]').attr('content') || null;
     const parsedDate = DateExtractorHelper.parsePublishedDate(pubDate);
 
     return [

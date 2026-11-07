@@ -210,6 +210,20 @@ Làm theo 4 giai đoạn trong khoảng 8 tuần cho một người, mỗi giai 
 | 3. Crawl nhanh | Tuần 4 | Theo interval, chạy song song, ghi DB theo lô, bảo mật nhóm "Trước go-live", triển khai | Crawl lại lần hai không trùng event, số request giảm rõ so với baseline; đạt tiêu chí bảo mật; đã diễn tập rollback và khôi phục DB |
 | 4. Kiến trúc đích | Tuần 5–8 | Worker, hàng đợi, outbox, API phân trang và SQL, frontend | Tắt worker giữa chừng không mất job hay thông báo; dashboard đạt mục tiêu 500 ms; E2E pass |
 
+### Tiến độ giai đoạn 1 (07/11/2026)
+
+Đã làm, có test:
+
+- Migration baseline và `AddDateUnknownExternalIdRunMetrics`; tắt `synchronize`, app tự chạy migration khi khởi động (`DB_MIGRATIONS_RUN=false` để tắt). Baseline dùng `IF NOT EXISTS` để chạy được trên DB cũ đã tạo bằng `synchronize`. Đã thử trên Postgres tạm: DB trống, DB cũ có dữ liệu, và schema khớp entity.
+- Telegram chỉ gán `notifiedAt` khi gửi thành công; escape HTML nội dung crawl; event `dateUnknown` không được gửi.
+- Không tìm được ngày thì `eventDate = null`, `dateUnknown = true`. Ngày giờ không ghi múi giờ được hiểu là giờ Việt Nam; ngày không có giờ thì `eventTime = null`. Event `dateUnknown` không lên dashboard vì truy vấn hiện tại lọc theo `eventDate`.
+- Giờ Sforum định dạng theo `Asia/Ho_Chi_Minh`.
+- Quảng cáo Meta có `externalId = adArchiveID`, `url` là trang Ad Library của quảng cáo, landing page lưu trong `rawData.landingUrl`.
+- Lần chạy crawl có trạng thái `success`, `partial`, `blocked` hoặc `failed`; lưu `requestCount` và `durationMs`, ghi log JSON `crawl_run` để đo baseline.
+- Test chạy với `TZ=UTC` để bắt lỗi phụ thuộc múi giờ server.
+
+Chưa làm: đo baseline trên nguồn thật (cần chạy crawl thật).
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

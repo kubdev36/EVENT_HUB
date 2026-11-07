@@ -1,4 +1,11 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('events')
 @Index(['sourceId', 'url'], { unique: true })
@@ -8,6 +15,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 @Index(['type'])
 @Index(['origin'])
 @Index(['sourceId', 'eventDate'])
+@Index(['sourceId', 'externalId'], {
+  unique: true,
+  where: '"externalId" IS NOT NULL',
+})
 export class Event {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -41,6 +52,14 @@ export class Event {
 
   @Column({ type: 'text', nullable: true })
   eventTime: string | null;
+
+  /** true khi không tìm được ngày đăng thật; khi đó eventDate để null, không dùng ngày crawl. */
+  @Column({ type: 'boolean', default: false })
+  dateUnknown: boolean;
+
+  /** ID ổn định phía nguồn (vd. adArchiveID của Meta) để dedupe khi nhiều item chung URL. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  externalId: string | null;
 
   @Column({ type: 'varchar', length: 64 })
   type: string;
