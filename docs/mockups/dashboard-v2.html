@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event Hub Dashboard</title>
+<!--
+  Mockup giao diện Tổng quan + Báo cáo (dữ liệu giả, không có dữ liệu thật).
+  Bảng màu theo hãng: 4 slot đầu của bảng màu chuẩn, đã kiểm tra bằng validate_palette.js
+  (light/dark đều PASS; light có WARN tương phản cho aqua/yellow -> luôn có nhãn trực tiếp + chế độ bảng).
+-->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --surface: #fcfcfb; --surface-2: #f1f2f4; --line: #e4e5e8; --grid: #eceef1;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7c7b76; --accent: #2a78d6; --accent-soft: #e6effb;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --seq-0: #f1f5fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
+  --good: #1f7a4d; --good-bg: #e6f4ec; --warn: #9a6200; --warn-bg: #fdf3dc; --bad: #b42318; --bad-bg: #fde8e7;
+  --shadow: 0 1px 2px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --line: #2e2e2b; --grid: #262624;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --accent: #6da7ec; --accent-soft: #1d2d42;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --seq-0: #1f2125; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #86b6ef;
+    --good: #4cc38a; --good-bg: #16291f; --warn: #e3b04b; --warn-bg: #2d2412; --bad: #ff7b70; --bad-bg: #321715;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --line: #2e2e2b; --grid: #262624;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --accent: #6da7ec; --accent-soft: #1d2d42;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --seq-0: #1f2125; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #86b6ef;
+  --good: #4cc38a; --good-bg: #16291f; --warn: #e3b04b; --warn-bg: #2d2412; --bad: #ff7b70; --bad-bg: #321715;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button { font: inherit; color: inherit; }
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.nav { background: var(--surface); border-right: 1px solid var(--line); padding: 16px 12px; }
+.brand { font-weight: 700; font-size: 15px; padding: 4px 8px 16px; }
+.nav a { display: block; padding: 8px 10px; border-radius: 8px; color: var(--text-2); text-decoration: none; cursor: pointer; }
+.nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav .sep { height: 1px; background: var(--line); margin: 10px 4px; }
+main { padding: 20px 24px 48px; min-width: 0; }
+.head { display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+h1 { font-size: 20px; margin: 0; }
+.sub { color: var(--text-3); font-size: 12.5px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; color: var(--text-2); }
+.chip.off { opacity: .45; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 12.5px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.grid { display: grid; gap: 14px; }
+.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.card h3 { margin: 0; font-size: 14px; }
+.card .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.kpi .label { color: var(--text-2); font-size: 12.5px; }
+.kpi .value { font-size: 26px; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.kpi .meta { font-size: 12px; color: var(--text-3); }
+.delta-up { color: var(--good); font-weight: 600; } .delta-down { color: var(--bad); font-weight: 600; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.status.good { color: var(--good); background: var(--good-bg); } .status.warn { color: var(--warn); background: var(--warn-bg); } .status.bad { color: var(--bad); background: var(--bad-bg); }
+.two { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); margin-bottom: 14px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart { position: relative; }
+svg text { fill: var(--text-3); font-size: 11px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.12); min-width: 150px; display: none; z-index: 5; }
+.tip .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.tip .row span:first-child { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); }
+.tip b { font-variant-numeric: tabular-nums; }
+.feed { display: flex; flex-direction: column; }
+.feed-item { display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.feed-item:first-child { border-top: 0; padding-top: 0; }
+.thumb { width: 52px; height: 38px; border-radius: 6px; background: var(--surface-2); display: grid; place-items: center; font-size: 10px; color: var(--text-3); }
+.feed-item .t { font-weight: 600; font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-item .m { font-size: 11.5px; color: var(--text-3); display: flex; gap: 6px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+.pill { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--text-2); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--text-3); font-weight: 500; font-size: 12px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.heat td.cell { text-align: center; font-variant-numeric: tabular-nums; border: 2px solid var(--surface); border-radius: 4px; cursor: default; }
+.sources li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); gap: 8px; }
+.sources li:first-child { border-top: 0; }
+.sources ul { list-style: none; margin: 0; padding: 0; }
+.muted { color: var(--text-3); font-size: 12px; }
+.three { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 14px; }
+.smalls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.small h4 { margin: 0 0 4px; font-size: 12.5px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+a.link { color: var(--accent); text-decoration: none; }
+.note { font-size: 12px; color: var(--text-3); margin-top: 8px; }
+.hidden { display: none !important; }
+.theme-toggle { margin-top: 16px; width: 100%; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .two, .three { grid-template-columns: minmax(0, 1fr); } }
+.chart { overflow-x: auto; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .kpis { grid-template-columns: minmax(0, 1fr); }
+  .filters > * { max-width: 100%; }
+  #brand-chips { flex: 1 1 100%; min-width: 0; }
+  .seg { overflow-x: auto; }
+  .kpi .value { font-size: 22px; }
+  .nav { display: flex; gap: 4px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 16px; }
+  .nav .brand, .nav .sep, .theme-toggle { display: none; }
+  main { padding: 16px; }
+  .smalls { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="nav">
+    <div class="brand">Event Hub</div>
+    <a data-page="overview" class="active">Tổng quan</a>
+    <a data-page="report">Báo cáo</a>
+    <div class="sep"></div>
+    <a>Lịch sự kiện</a><a>Đối thủ</a><a>Thư viện ảnh</a><a>Cài đặt</a>
+    <button class="btn theme-toggle" id="theme">Đổi giao diện sáng/tối</button>
+  </nav>
+
+  <main>
+    <!-- ===================== TỔNG QUAN ===================== -->
+    <section id="page-overview">
+      <div class="head">
+        <div><h1>Tổng quan</h1><div class="sub">Dữ liệu giả để duyệt thiết kế · cập nhật 10:45, 07/11/2026</div></div>
+      </div>
+      <div class="filters">
+        <div class="seg" id="range"><button data-d="7" class="on">7 ngày</button><button data-d="30">30 ngày</button><button data-d="90">90 ngày</button></div>
+        <span id="brand-chips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+        <div class="seg" id="type-filter"><button data-t="all" class="on">Tất cả loại</button><button data-t="promo">Khuyến mãi</button><button data-t="release">Ra mắt</button><button data-t="event">Sự kiện</button></div>
+      </div>
+
+      <div class="grid kpis" id="kpis"></div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head">
+            <h3>Số bài mới mỗi ngày theo hãng</h3>
+            <div style="display:flex;gap:10px;align-items:center"><div class="legend" id="line-legend"></div><button class="btn" data-toggle-table="line">Xem bảng</button></div>
+          </div>
+          <div class="chart" id="line-chart"></div>
+          <div class="hidden" id="line-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Mới nhất</h3><a class="link muted">Xem tất cả</a></div>
+          <div class="feed" id="feed"></div>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><h3>Loại bài theo hãng</h3><span class="muted">Màu càng đậm càng nhiều bài</span></div>
+          <div class="chart" id="type-heat"></div>
+        </div>
+        <div class="card sources">
+          <div class="card-head"><h3>Tình trạng thu thập</h3><span class="muted">4 nguồn</span></div>
+          <ul id="sources"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== BÁO CÁO ===================== -->
+    <section id="page-report" class="hidden">
+      <div class="head">
+        <div><h1>Báo cáo</h1><div class="sub">So sánh hoạt động đối thủ theo kỳ · dữ liệu giả</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="seg" id="period"><button data-p="week" class="on">Tuần này</button><button data-p="month">Tháng này</button><button data-p="quarter">Quý này</button></div>
+          <button class="btn">Xuất Excel</button>
+          <button class="btn primary">Gửi báo cáo tuần qua Telegram</button>
+        </div>
+      </div>
+
+      <div class="grid kpis" id="report-kpis"></div>
+
+      <div class="grid three">
+        <div class="card">
+          <div class="card-head"><h3>Thị phần bài đăng</h3><span class="muted">so với kỳ trước</span></div>
+          <div class="chart" id="share"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Đối thủ đăng bài vào lúc nào?</h3><span class="muted">Giờ Việt Nam · màu đậm = nhiều bài</span></div>
+          <div class="chart" id="when"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><h3>Nhịp độ khuyến mãi theo tuần</h3><span class="muted">Mỗi hãng một biểu đồ, cùng thang đo</span></div>
+        <div class="smalls" id="smalls"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Chương trình nổi bật trong kỳ</h3><button class="btn">Xuất CSV</button></div>
+        <div style="overflow-x:auto"><table id="top-table"></table></div>
+        <div class="note">Bài chưa rõ ngày đăng không được tính vào báo cáo.</div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+// ---------- Dữ liệu giả (seeded, để lần nào mở cũng giống nhau) ----------
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+const BRANDS = [
+  { id: 'cps', name: 'CellphoneS', v: '--s1', base: 6 },
+  { id: 'fpt', name: 'FPT Shop', v: '--s2', base: 5 },
+  { id: 'hh', name: 'Hoàng Hà', v: '--s3', base: 3 },
+  { id: 'tgdd', name: 'Thế giới di động', v: '--s4', base: 2 },
+];
+const TYPES = [['promo', 'Khuyến mãi'], ['release', 'Ra mắt'], ['event', 'Sự kiện'], ['ads', 'Quảng cáo'], ['other', 'Khác']];
+const TYPE_LABEL = Object.fromEntries(TYPES);
+const TODAY = new Date(2026, 10, 7);
+const DAYS = 90;
+const daily = BRANDS.map((b) => Array.from({ length: DAYS }, (_, i) => Math.max(0, Math.round(b.base + 3 * Math.sin(i / 4 + b.base) + (rnd() - 0.4) * 4 + (i % 7 === 5 ? 3 : 0)))));
+const TITLES = ['Giảm đến 5 triệu khi mua iPhone 18 Pro', 'Mở bán Galaxy S27 Ultra, tặng gói bảo hành', 'Tuần lễ laptop: giảm thêm 1,5 triệu', 'Thu cũ đổi mới trợ giá đến 3 triệu', 'Flash sale cuối tuần phụ kiện từ 49K', 'Ra mắt realme C01 pin 6.500 mAh', 'Đêm nhạc Galaxy Festival, săn vé cùng cửa hàng', 'Trả góp 0% qua thẻ tín dụng', 'Khai trương cửa hàng mới, quà tặng 500K', 'Đặt trước iPhone Duo nhận ưu đãi 2 triệu'];
+const color = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const state = { range: 7, brands: new Set(BRANDS.map((b) => b.id)), type: 'all', table: { line: false } };
+const fmtDate = (d) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+const dayOf = (i) => new Date(TODAY.getTime() - (DAYS - 1 - i) * 86400000);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.append(n); return n; };
+const h = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const tip = document.getElementById('tip');
+function showTip(evt, title, rows) {
+  tip.replaceChildren(h('div', null, title));
+  tip.firstChild.style.cssText = 'font-weight:600;margin-bottom:4px';
+  for (const [label, value, v] of rows) {
+    const r = h('div', 'row'); const l = h('span');
+    if (v) { const d = h('span', 'dot'); d.style.background = color(v); l.append(d); }
+    l.append(document.createTextNode(label)); r.append(l, h('b', null, value)); tip.append(r);
+  }
+  tip.style.display = 'block';
+  const x = Math.min(evt.pageX + 14, window.scrollX + innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + 'px'; tip.style.top = evt.pageY + 14 + 'px';
+}
+const hideTip = () => { tip.style.display = 'none'; };
+const typeFactor = () => (state.type === 'all' ? 1 : { promo: 0.55, release: 0.15, event: 0.12 }[state.type]);
+const activeBrands = () => BRANDS.filter((b) => state.brands.has(b.id));
+const sum = (a) => a.reduce((x, y) => x + y, 0);
+const windowSum = (arr, len, offset = 0) => sum(arr.slice(DAYS - len - offset, DAYS - offset));
+
+// ---------- Tổng quan ----------
+function renderChips() {
+  const box = document.getElementById('brand-chips'); box.replaceChildren();
+  for (const b of BRANDS) {
+    const c = h('button', 'chip' + (state.brands.has(b.id) ? '' : ' off'));
+    const d = h('span', 'dot'); d.style.background = color(b.v); c.append(d, document.createTextNode(b.name));
+    c.onclick = () => { if (state.brands.has(b.id) && state.brands.size > 1) state.brands.delete(b.id); else state.brands.add(b.id); renderOverview(); };
+    box.append(c);
+  }
+}
+function renderKpis() {
+  const f = typeFactor(), n = state.range;
+  const cur = Math.round(sum(activeBrands().map((b) => windowSum(daily[BRANDS.indexOf(b)], n))) * f);
+  const prev = Math.round(sum(activeBrands().map((b) => windowSum(daily[BRANDS.indexOf(b)], n, n))) * f);
+  const pct = prev ? Math.round(((cur - prev) / prev) * 100) : 0;
+  const top = activeBrands().map((b) => [b, windowSum(daily[BRANDS.indexOf(b)], n)]).sort((a, z) => z[1] - a[1])[0];
+  const box = document.getElementById('kpis'); box.replaceChildren();
+  const tile = (label, value, meta) => { const c = h('div', 'card kpi'); c.append(h('div', 'label', label), h('div', 'value', value)); const m = h('div', 'meta'); m.append(...meta); c.append(m); box.append(c); };
+  const d = h('span', pct >= 0 ? 'delta-up' : 'delta-down', (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '%');
+  tile('Bài mới trong ' + n + ' ngày', String(cur), [d, document.createTextNode(' so với ' + n + ' ngày trước (' + prev + ')')]);
+  tile('Khuyến mãi đang chạy', String(Math.round(cur * 0.42)), [document.createTextNode('Bài khuyến mãi đăng trong 14 ngày gần nhất')]);
+  const dot = h('span', 'dot'); dot.style.background = color(top[0].v);
+  tile('Hãng đăng nhiều nhất', top[0].name, [dot, document.createTextNode(' ' + Math.round(top[1] * f) + ' bài trong kỳ')]);
+  tile('Thu thập dữ liệu', '4/4 nguồn', [h('span', 'status good', '✓ Ổn định'), document.createTextNode(' · lần cuối 10:45')]);
+}
+function renderLine() {
+  const box = document.getElementById('line-chart'); box.replaceChildren();
+  const n = state.range, f = typeFactor(), brands = activeBrands();
+  const series = brands.map((b) => ({ b, vals: daily[BRANDS.indexOf(b)].slice(DAYS - n).map((v) => Math.round(v * f)) }));
+  const W = Math.max(box.clientWidth, 320), H = 330, m = { l: 30, r: 104, t: 10, b: 24 };
+  const max = Math.max(4, ...series.flatMap((s) => s.vals)); const yMax = Math.ceil(max / 4) * 4;
+  const x = (i) => m.l + (i * (W - m.l - m.r)) / Math.max(1, n - 1), y = (v) => m.t + (H - m.t - m.b) * (1 - v / yMax);
+  const svg = el('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Số bài mới mỗi ngày theo hãng' }, box);
+  for (let k = 0; k <= 4; k++) { const v = (yMax / 4) * k; el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: color('--grid') }, svg); el('text', { x: m.l - 6, y: y(v) + 4, 'text-anchor': 'end' }, svg).textContent = v; }
+  const step = Math.ceil(n / 6);
+  for (let i = 0; i < n; i += step) el('text', { x: x(i), y: H - 6, 'text-anchor': 'middle' }, svg).textContent = fmtDate(dayOf(DAYS - n + i));
+  // Nhãn trực tiếp ở cuối đường, tránh chồng nhau
+  const ends = series.map((s) => ({ s, y: y(s.vals[n - 1]) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+  for (const s of series) {
+    el('path', { d: s.vals.map((v, i) => (i ? 'L' : 'M') + x(i) + ' ' + y(v)).join(''), fill: 'none', stroke: color(s.b.v), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+  }
+  for (const e of ends) {
+    el('circle', { cx: x(n - 1), cy: y(e.s.vals[n - 1]), r: 4, fill: color(e.s.b.v), stroke: color('--surface'), 'stroke-width': 2 }, svg);
+    const t = el('text', { x: x(n - 1) + 8, y: e.y + 4 }, svg); t.textContent = e.s.b.name; t.style.fill = color('--text-2');
+  }
+  const cross = el('line', { y1: m.t, y2: H - m.b, stroke: color('--text-3'), 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
+  const hit = el('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' }, svg);
+  hit.addEventListener('mousemove', (evt) => {
+    const r = svg.getBoundingClientRect(); const i = Math.max(0, Math.min(n - 1, Math.round(((evt.clientX - r.left - m.l) / (W - m.l - m.r)) * (n - 1))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    showTip(evt, dayOf(DAYS - n + i).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }), [...series].sort((a, b) => b.vals[i] - a.vals[i]).map((s) => [s.b.name, s.vals[i] + ' bài', s.b.v]));
+  });
+  hit.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+  const lg = document.getElementById('line-legend'); lg.replaceChildren();
+  for (const s of series) { const sp = h('span'); const d = h('span', 'dot'); d.style.background = color(s.b.v); sp.append(d, document.createTextNode(s.b.name)); lg.append(sp); }
+  // Chế độ bảng
+  const tb = document.getElementById('line-table'); tb.replaceChildren();
+  const t = h('table'); const hr = h('tr'); hr.append(h('th', null, 'Ngày'), ...series.map((s) => h('th', 'num', s.b.name))); t.append(hr);
+  for (let i = n - 1; i >= 0; i--) { const r = h('tr'); r.append(h('td', null, fmtDate(dayOf(DAYS - n + i))), ...series.map((s) => h('td', 'num', String(s.vals[i])))); t.append(r); }
+  tb.append(t); box.classList.toggle('hidden', state.table.line); tb.classList.toggle('hidden', !state.table.line);
+}
+function renderFeed() {
+  const box = document.getElementById('feed'); box.replaceChildren(); seed = 11;
+  const times = ['10 phút trước', '35 phút trước', '1 giờ trước', '2 giờ trước', '3 giờ trước', 'Hôm qua 18:20', 'Hôm qua 09:05'];
+  times.forEach((when, i) => {
+    const b = activeBrands()[i % activeBrands().length]; const type = state.type === 'all' ? TYPES[i % 3][0] : state.type;
+    const it = h('div', 'feed-item'); const th = h('div', 'thumb', 'Ảnh');
+    const body = h('div'); body.append(h('div', 't', TITLES[(i * 3) % TITLES.length]));
+    const meta = h('div', 'm'); const d = h('span', 'dot'); d.style.background = color(b.v);
+    meta.append(d, document.createTextNode(b.name), h('span', 'pill', TYPE_LABEL[type]), document.createTextNode(when));
+    body.append(meta); it.append(th, body); box.append(it);
+  });
+}
+// Màu chữ chọn theo độ sáng thật của nền (ramp đảo chiều ở chế độ tối), không theo bậc.
+const luminance = (hex) => { const n = parseInt(hex.replace('#', ''), 16); const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+function seqColor(v, max) { const k = v === 0 ? 0 : Math.min(6, 1 + Math.floor((v / max) * 5.99)); const bg = color('--seq-' + k); return { bg, fg: luminance(bg) > 0.3 ? '#0b0b0b' : '#ffffff' }; }
+function renderTypeHeat() {
+  const box = document.getElementById('type-heat'); box.replaceChildren(); seed = 23;
+  const n = state.range; const brands = activeBrands();
+  const mx = brands.map((b) => { const total = windowSum(daily[BRANDS.indexOf(b)], n); const w = [0.5, 0.14, 0.12, 0.14, 0.1].map((p) => p * (0.8 + rnd() * 0.4)); const s = sum(w); return w.map((p) => Math.round((total * p) / s)); });
+  const max = Math.max(1, ...mx.flat());
+  const t = h('table', 'heat'); const hr = h('tr'); hr.append(h('th', null, ''), ...TYPES.map(([, l]) => h('th', 'num', l)), h('th', 'num', 'Tổng')); t.append(hr);
+  brands.forEach((b, i) => {
+    const r = h('tr'); const name = h('td'); const d = h('span', 'dot'); d.style.background = color(b.v); name.append(d, document.createTextNode(' ' + b.name)); r.append(name);
+    mx[i].forEach((v, j) => { const c = h('td', 'cell', String(v)); const sc = seqColor(v, max); c.style.background = sc.bg; c.style.color = sc.fg;
+      c.onmousemove = (e) => showTip(e, b.name, [[TYPES[j][1], v + ' bài'], ['Tỷ lệ trong hãng', Math.round((v / Math.max(1, sum(mx[i]))) * 100) + '%']]); c.onmouseleave = hideTip; r.append(c); });
+    r.append(h('td', 'num', String(sum(mx[i])))); t.append(r);
+  });
+  box.append(t);
+}
+function renderSources() {
+  const ul = document.getElementById('sources'); ul.replaceChildren();
+  const rows = [['CellphoneS', 'good', '✓ Ổn định', 'API Sforum · 180 bài · 4 giây'], ['FPT Shop', 'good', '✓ Ổn định', 'HTML 2 bước · 37 bài · 4 giây'], ['Hoàng Hà', 'good', '✓ Ổn định', 'RSS · 32 bài · 2 giây'], ['Thế giới di động', 'warn', '! Thiếu ngày 3 bài', 'HTML 2 bước · 12 bài · 6 giây']];
+  for (const [name, st, label, meta] of rows) {
+    const b = BRANDS.find((x) => x.name === name); const li = h('li'); const left = h('div');
+    const top = h('div'); const d = h('span', 'dot'); d.style.background = color(b.v); top.append(d, document.createTextNode(' ' + name)); top.style.fontWeight = '600';
+    left.append(top, h('div', 'muted', meta)); li.append(left, h('span', 'status ' + st, label)); ul.append(li);
+  }
+}
+function renderOverview() { renderChips(); renderKpis(); renderLine(); renderFeed(); renderTypeHeat(); renderSources(); }
+
+// ---------- Báo cáo ----------
+const PERIOD = { week: 7, month: 30, quarter: 90 };
+const report = { period: 'week' };
+function renderReportKpis() {
+  const n = PERIOD[report.period]; const box = document.getElementById('report-kpis'); box.replaceChildren();
+  const tot = sum(BRANDS.map((b, i) => windowSum(daily[i], n))), prev = sum(BRANDS.map((b, i) => windowSum(daily[i], Math.min(n, DAYS / 2), n)));
+  const tile = (label, value, meta) => { const c = h('div', 'card kpi'); c.append(h('div', 'label', label), h('div', 'value', value), h('div', 'meta', meta)); box.append(c); };
+  tile('Tổng bài của đối thủ', String(tot), (tot >= prev ? '▲ ' : '▼ ') + Math.abs(Math.round(((tot - prev) / Math.max(1, prev)) * 100)) + '% so với kỳ trước');
+  tile('Bài khuyến mãi', String(Math.round(tot * 0.5)), 'Chiếm khoảng 50% tổng bài');
+  tile('Sản phẩm được nhắc nhiều nhất', 'iPhone 18 Pro', 'Xuất hiện trong 23 bài');
+  tile('Khung giờ đăng nhiều nhất', '18:00–21:00', 'Thứ Sáu và Thứ Bảy');
+}
+function renderShare() {
+  const box = document.getElementById('share'); box.replaceChildren(); const n = PERIOD[report.period];
+  const vals = BRANDS.map((b, i) => ({ b, cur: windowSum(daily[i], n), prev: windowSum(daily[i], Math.min(n, DAYS / 2), n) }));
+  const total = sum(vals.map((v) => v.cur)); vals.sort((a, z) => z.cur - a.cur);
+  const W = Math.max(box.clientWidth, 300), rowH = 34, H = vals.length * rowH + 6, labelW = 118, valW = 92;
+  const svg = el('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Thị phần bài đăng theo hãng' }, box);
+  const max = Math.max(...vals.map((v) => v.cur));
+  vals.forEach((v, i) => {
+    const yy = i * rowH + 6; const w = ((W - labelW - valW) * v.cur) / max; const share = Math.round((v.cur / total) * 100); const delta = v.cur - v.prev;
+    const t = el('text', { x: 0, y: yy + 15 }, svg); t.textContent = v.b.name; t.style.fill = color('--text-2'); t.style.fontSize = '12px';
+    el('rect', { x: labelW, y: yy + 3, width: W - labelW - valW, height: 16, rx: 4, fill: color('--surface-2') }, svg);
+    const bar = el('rect', { x: labelW, y: yy + 3, width: Math.max(4, w), height: 16, rx: 4, fill: color(v.b.v) }, svg);
+    const vt = el('text', { x: W - valW + 8, y: yy + 15 }, svg); vt.textContent = share + '% · ' + v.cur; vt.style.fill = color('--text'); vt.style.fontSize = '12px'; vt.style.fontWeight = '600';
+    const hit = el('rect', { x: 0, y: yy, width: W, height: rowH, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', (e) => showTip(e, v.b.name, [['Kỳ này', v.cur + ' bài', v.b.v], ['Kỳ trước', v.prev + ' bài'], ['Thay đổi', (delta >= 0 ? '+' : '') + delta + ' bài'], ['Thị phần', share + '%']]));
+    hit.addEventListener('mouseleave', hideTip);
+    void bar;
+  });
+}
+function renderWhen() {
+  const box = document.getElementById('when'); box.replaceChildren(); seed = 41;
+  const days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']; const slots = ['0–6h', '6–9h', '9–12h', '12–15h', '15–18h', '18–21h', '21–24h'];
+  const peak = [0.1, 0.6, 1, 0.7, 0.6, 1.4, 0.5];
+  const mx = days.map((_, d) => slots.map((_, s) => Math.round((peak[s] * (d >= 4 ? 1.4 : 1) * 8 + rnd() * 4) * (s === 0 ? 0.3 : 1))));
+  const max = Math.max(...mx.flat());
+  const t = h('table', 'heat'); const hr = h('tr'); hr.append(h('th', null, ''), ...slots.map((s) => h('th', 'num', s))); t.append(hr);
+  days.forEach((d, i) => { const r = h('tr'); r.append(h('td', null, d)); mx[i].forEach((v, j) => { const c = h('td', 'cell', String(v)); const sc = seqColor(v, max); c.style.background = sc.bg; c.style.color = sc.fg; c.onmousemove = (e) => showTip(e, d + ' · ' + slots[j], [['Số bài', v + ' bài']]); c.onmouseleave = hideTip; r.append(c); }); t.append(r); });
+  box.append(t);
+}
+function renderSmalls() {
+  const box = document.getElementById('smalls'); box.replaceChildren(); const weeks = 12;
+  const data = BRANDS.map((b, i) => Array.from({ length: weeks }, (_, w) => Math.round(windowSum(daily[i], 7, (weeks - 1 - w) * 7) * 0.5)));
+  const max = Math.max(...data.flat()); const yMax = Math.ceil(max / 5) * 5;
+  BRANDS.forEach((b, bi) => {
+    const wrap = h('div', 'small chart'); const title = h('h4'); const d = h('span', 'dot'); d.style.background = color(b.v); title.append(d, document.createTextNode(b.name + ' · ' + sum(data[bi]) + ' bài KM / 12 tuần'));
+    wrap.append(title); box.append(wrap);
+    const W = Math.max(wrap.clientWidth, 260), H = 110, m = { l: 22, r: 4, t: 6, b: 18 }; const bw = (W - m.l - m.r) / weeks;
+    const svg = el('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Bài khuyến mãi theo tuần của ' + b.name }, wrap);
+    for (const v of [0, yMax / 2, yMax]) { const yy = m.t + (H - m.t - m.b) * (1 - v / yMax); el('line', { x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: color('--grid') }, svg); el('text', { x: m.l - 4, y: yy + 4, 'text-anchor': 'end' }, svg).textContent = v; }
+    data[bi].forEach((v, w) => {
+      const bh = ((H - m.t - m.b) * v) / yMax; const x = m.l + w * bw + 1; const yy = H - m.b - bh;
+      el('path', { d: `M${x} ${H - m.b}V${yy + Math.min(4, bh)}q0 -4 4 -4h${Math.max(0, bw - 10)}q4 0 4 4V${H - m.b}Z`, fill: color(b.v) }, svg);
+      if (w % 3 === 0) el('text', { x: x + bw / 2 - 1, y: H - 4, 'text-anchor': 'middle' }, svg).textContent = 'T' + (w + 1);
+      const hit = el('rect', { x: m.l + w * bw, y: m.t, width: bw, height: H - m.t - m.b, fill: 'transparent' }, svg);
+      const start = new Date(TODAY.getTime() - (weeks - w) * 7 * 86400000);
+      hit.addEventListener('mousemove', (e) => showTip(e, 'Tuần từ ' + fmtDate(start), [[b.name, v + ' bài khuyến mãi', b.v]])); hit.addEventListener('mouseleave', hideTip);
+    });
+  });
+}
+function renderTop() {
+  const t = document.getElementById('top-table'); t.replaceChildren(); seed = 5;
+  const hr = h('tr'); hr.append(...['Chương trình', 'Hãng', 'Loại', 'Ngày đăng', ''].map((x) => h('th', null, x))); t.append(hr);
+  TITLES.slice(0, 7).forEach((title, i) => {
+    const b = BRANDS[i % 4]; const r = h('tr'); const bc = h('td'); const d = h('span', 'dot'); d.style.background = color(b.v); bc.append(d, document.createTextNode(' ' + b.name));
+    const link = h('td'); const a = h('a', 'link', 'Mở bài'); a.href = '#'; link.append(a);
+    r.append(h('td', null, title), bc, h('td', null, TYPE_LABEL[TYPES[i % 3][0]]), h('td', null, fmtDate(dayOf(DAYS - 1 - i))), link); t.append(r);
+  });
+}
+function renderReport() { renderReportKpis(); renderShare(); renderWhen(); renderSmalls(); renderTop(); }
+
+// ---------- Điều khiển ----------
+const bindSeg = (id, attr, fn) => document.getElementById(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; document.querySelectorAll('#' + id + ' button').forEach((x) => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); });
+bindSeg('range', 'd', (v) => { state.range = +v; renderOverview(); });
+bindSeg('type-filter', 't', (v) => { state.type = v; renderOverview(); });
+bindSeg('period', 'p', (v) => { report.period = v; renderReport(); });
+document.querySelector('[data-toggle-table="line"]').onclick = (e) => { state.table.line = !state.table.line; e.target.textContent = state.table.line ? 'Xem biểu đồ' : 'Xem bảng'; renderLine(); };
+let page = 'overview';
+document.querySelectorAll('.nav a[data-page]').forEach((a) => a.onclick = () => {
+  page = a.dataset.page; document.querySelectorAll('.nav a[data-page]').forEach((x) => x.classList.toggle('active', x === a));
+  document.getElementById('page-overview').classList.toggle('hidden', page !== 'overview'); document.getElementById('page-report').classList.toggle('hidden', page !== 'report');
+  page === 'overview' ? renderOverview() : renderReport();
+});
+document.getElementById('theme').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark'; page === 'overview' ? renderOverview() : renderReport();
+};
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => (page === 'overview' ? renderOverview() : renderReport()), 150); });
+if (location.hash === '#report') document.querySelector('.nav a[data-page="report"]').click(); else renderOverview();
+</script>
+</body>
+</html>
