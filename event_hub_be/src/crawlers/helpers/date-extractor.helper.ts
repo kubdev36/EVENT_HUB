@@ -128,8 +128,24 @@ export class DateExtractorHelper {
   static parseDateFromUrl(url: string | null | undefined, referenceDate: Date = new Date()): { date: Date; time: string } | null {
     if (!url) return null;
     const refTime = this.formatTimeFromDate(referenceDate);
+
+    // 1. TikTok Snowflake Video ID extraction (First 32 bits = UNIX epoch in seconds)
+    const tiktokMatch = url.match(/tiktok\.com\/@[^\/]+\/video\/(\d{15,22})/i) || url.match(/\/video\/(\d{15,22})/i);
+    if (tiktokMatch) {
+      try {
+        const videoId = tiktokMatch[1];
+        const timestampSec = Number(BigInt(videoId) >> 32n);
+        if (timestampSec >= 1500000000 && timestampSec <= 2500000000) {
+          const videoDate = new Date(timestampSec * 1000);
+          const timeStr = this.formatTimeFromDate(videoDate);
+          return { date: videoDate, time: timeStr };
+        }
+      } catch {
+        // ignore BigInt parse failure
+      }
+    }
     
-    // Check /2026/09/29/ or /2026-09-29/
+    // 2. Check /2026/09/29/ or /2026-09-29/
     const ymdMatch = url.match(/\/(202[0-9])[\/\-_](0?[1-9]|1[0-2])[\/\-_](0?[1-9]|[12][0-9]|3[01])(?:\/|_|-|\.|$)/);
     if (ymdMatch) {
       const year = parseInt(ymdMatch[1], 10);

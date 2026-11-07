@@ -62,7 +62,7 @@ export default function CrawlerTab({
                   <div className="text-xs font-bold text-slate-900 truncate">{c.name}</div>
                   <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
                     <Clock size={10} className="shrink-0" />
-                    <span className="truncate">Quét {c.interval}/lần • {c.lastRun}</span>
+                    <span className="truncate">Quét {c.interval || '15p'}/lần • {c.lastRun || 'Chưa chạy'}</span>
                   </div>
                 </div>
               </div>

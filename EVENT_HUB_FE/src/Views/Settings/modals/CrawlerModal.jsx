@@ -120,7 +120,9 @@ export default function CrawlerModal({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-700">Link RSS / Website theo dõi:</label>
+              <label className="font-semibold text-slate-700">
+                Đường dẫn theo dõi (Website, Facebook, TikTok...):
+              </label>
               <button
                 type="button"
                 onClick={handleAddUrlField}
@@ -137,7 +139,7 @@ export default function CrawlerModal({
                     type="text"
                     value={url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="https://..."
+                    placeholder="VD: https://cellphones.com.vn/km, facebook.com/..., @cellphones.official..."
                     className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
                   />
                   {formData.targetUrls?.length > 1 && (

@@ -14,6 +14,7 @@ import { CrawlerHttpClient } from './engine/crawler-http.client.js';
 import { GenericRssEngine } from './engine/generic-rss.engine.js';
 import { GenericApiEngine } from './engine/generic-api.engine.js';
 import { GenericHtmlEngine } from './engine/generic-html.engine.js';
+import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
 
 @Module({
   imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Event, CrawlerRun, Setting]), AuthModule],
@@ -27,6 +28,7 @@ import { GenericHtmlEngine } from './engine/generic-html.engine.js';
     GenericRssEngine,
     GenericApiEngine,
     GenericHtmlEngine,
+    GenericMetaAdsEngine,
   ],
   exports: [CrawlerService],
 })

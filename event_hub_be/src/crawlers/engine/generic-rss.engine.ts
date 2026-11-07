@@ -66,12 +66,24 @@ export class GenericRssEngine {
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
-      let image = entryNode.find('link[rel="enclosure"]').attr('href') ||
-                  entryNode.find('enclosure').attr('url') ||
-                  entryNode.find('media\\:content').attr('url') || null;
+      let image: string | null = null;
+      entryNode.find('link').each((_, linkEl) => {
+        const rel = $(linkEl).attr('rel');
+        const type = $(linkEl).attr('type') || '';
+        const href = $(linkEl).attr('href');
+        if (href && (rel === 'enclosure' || type.startsWith('image/')) && !image) {
+          image = href;
+        }
+      });
+
+      if (!image) {
+        image = entryNode.find('enclosure').attr('url') ||
+                entryNode.find('media\\:content').attr('url') || null;
+      }
 
       if (!image && contentRaw) {
-        const descMatch = contentRaw.match(/<img[^>]+src=["']([^"']+)["']/i) || contentRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
+        const unescaped = contentRaw.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+        const descMatch = unescaped.match(/<img[^>]+src=["']([^"']+)["']/i) || unescaped.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif|image)/i);
         if (descMatch) image = descMatch[1] || descMatch[0];
       }
 

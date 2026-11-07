@@ -11,6 +11,7 @@ import { CrawlerHttpClient } from '../engine/crawler-http.client.js';
 import { GenericRssEngine } from '../engine/generic-rss.engine.js';
 import { GenericApiEngine } from '../engine/generic-api.engine.js';
 import { GenericHtmlEngine } from '../engine/generic-html.engine.js';
+import { GenericMetaAdsEngine } from '../engine/generic-meta-ads.engine.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
@@ -29,6 +30,7 @@ export class CrawlerService {
     private readonly rssEngine: GenericRssEngine,
     private readonly apiEngine: GenericApiEngine,
     private readonly htmlEngine: GenericHtmlEngine,
+    private readonly metaAdsEngine: GenericMetaAdsEngine,
   ) {}
 
   async notifyPendingEvents() {
@@ -197,16 +199,23 @@ export class CrawlerService {
     allItems.push(...apiItems);
 
     // 2. Fetch all configured target URLs
-    for (const url of target.targetUrls || []) {
+    for (let url of target.targetUrls || []) {
+      url = url.trim();
+      if (!url) continue;
+
+      const isFacebook = url.includes('facebook.com') || url.includes('ads/library');
       const isRssOrXml =
         url.includes('.rss') ||
         url.includes('.xml') ||
         url.includes('/feed') ||
         url.includes('format=Atom') ||
-        url.includes('format=Mrss') ||
-        url.includes('bridge=') ||
-        url.includes(':3100');
-      if (isRssOrXml) {
+        url.includes('format=Mrss');
+
+      if (isFacebook) {
+        // Meta Ad Library Engine (100% active campaigns & dark ads, zero account risk)
+        const metaAdItems = await this.metaAdsEngine.fetchActiveAds(url);
+        allItems.push(...metaAdItems);
+      } else if (isRssOrXml) {
         // Generic RSS / Google News Sitemap Engine
         const rssItems = await this.rssEngine.fetchRssOrSitemap(url);
         allItems.push(...rssItems);
