@@ -10,12 +10,12 @@ import { AuditService } from './audit.service.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-type AuditRequest = {
+export type AuditRequest = {
   method: string;
   originalUrl?: string;
   url: string;
   route?: { path?: string };
-  params?: Record<string, string>;
+  params?: Record<string, string | string[]>;
   body?: unknown;
   ip?: string;
   user?: { id?: string; email?: string };
@@ -69,7 +69,7 @@ export class AuditInterceptor implements NestInterceptor {
       isLogin && typeof body?.email === 'string'
         ? body.email.trim().toLowerCase()
         : null;
-    const target = Object.values(req.params ?? {}).join(',') || null;
+    const target = Object.values(req.params ?? {}).flat().join(',') || null;
     return {
       userId: req.user?.id ?? null,
       userEmail: req.user?.email ?? loginEmail,

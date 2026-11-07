@@ -1,7 +1,8 @@
 import { jest } from '@jest/globals';
 import { INestApplication } from '@nestjs/common';
 // Nạp throttler trước (AuthController dùng), tránh lỗi nạp ESM đồng thời của Jest.
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerException, ThrottlerModule } from '@nestjs/throttler';
+import { AuditThrottleFilter } from './audit/audit-throttle.filter.js';
 import { LOGIN_THROTTLERS } from './auth/login-throttle.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -15,7 +16,11 @@ import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuthController } from './auth/controller/auth.controller.js';
 import { JwtStrategy } from './auth/jwt.strategy.js';
 import { AuthService } from './auth/service/auth.service.js';
-import { requireCsrfHeader, SESSION_COOKIE } from './auth/session-cookie.js';
+import {
+  createCsrfMiddleware,
+  requireCsrfHeader,
+  SESSION_COOKIE,
+} from './auth/session-cookie.js';
 import {
   decryptSecret,
   encryptSecret,
@@ -334,5 +339,46 @@ describe('Nhật ký thao tác', () => {
       }),
     );
     expect(record).not.toHaveBeenCalled();
+  });
+
+  it('request bị chặn vì thiếu header CSRF được báo để ghi nhật ký', () => {
+    const onBlocked = jest.fn();
+    const mw = createCsrfMiddleware(onBlocked);
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    const next = jest.fn();
+    const req = (method: string, header?: string) =>
+      ({ method, get: () => header }) as never;
+    mw(req('POST'), res as never, next);
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+    mw(req('POST', 'XMLHttpRequest'), res as never, next);
+    mw(req('GET'), res as never, next);
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('đăng nhập bị giới hạn tốc độ (429) được ghi nhật ký, kèm email đã nhập', () => {
+    const record = jest.fn(async () => undefined);
+    const filter = new AuditThrottleFilter({ record } as never);
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    const req = {
+      method: 'POST',
+      url: '/auth/login',
+      route: { path: '/auth/login' },
+      body: { email: 'a@b.vn', password: 'guess' },
+    };
+    filter.catch(new ThrottlerException(), {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as never);
+    expect(res.status).toHaveBeenCalledWith(429);
+    const entry = (record.mock.calls[0] as unknown[])[0];
+    expect(entry).toMatchObject({
+      action: 'auth.login',
+      userEmail: 'a@b.vn',
+      statusCode: 429,
+      success: false,
+    });
+    expect(JSON.stringify(entry)).not.toContain('guess');
   });
 });

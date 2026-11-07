@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { AuditThrottleFilter } from './audit-throttle.filter.js';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module.js';
 import { AuditLog } from './audit-log.entity.js';
@@ -13,6 +14,7 @@ import { AuditService } from './audit.service.js';
   providers: [
     AuditService,
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    { provide: APP_FILTER, useClass: AuditThrottleFilter },
   ],
   exports: [AuditService],
 })
