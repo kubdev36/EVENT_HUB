@@ -264,6 +264,8 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Đếm bằng SQL theo giờ Việt Nam. Quyền phòng ban nằm trong điều kiện truy vấn, sửa lỗi thiếu bài khi vượt 5.000 dòng (có test 6.000 bài).
 - `eventDate` đang là `timestamp` không múi giờ, giá trị là giờ địa phương của process ghi; SQL cộng độ lệch để ra giờ Việt Nam. Test chạy đúng với `TZ=UTC` và `TZ=Asia/Ho_Chi_Minh`. Chuyển sang `timestamptz` để bỏ độ lệch này là việc riêng.
 - Test trên Postgres thật: `src/dashboard/dashboard.service.db.spec.ts`, chạy khi đặt `DASHBOARD_TEST_DB` (DB tạm, test xóa bảng).
+- Các trang còn lại (thanh menu, Hằng ngày, Đối thủ, Phòng ban, Lịch tháng, Thư viện ảnh, Cài đặt) chuyển sang `/dashboard/*`; đã gỡ `/events`, `/events/latest`, `/events/overview`, `/events/dashboard`, `/events/by-date`. `GET /dashboard/sources` cho thanh menu; `/dashboard/events` có `includeOwn`, `hasImage`, trả `origin`.
+- Migration `TimestampsToTimestamptz`: 13 cột thời gian chuyển sang `timestamptz`, quy đổi từ giờ +7 (Node và Postgres `Asia/Bangkok` đều +7). API dashboard dùng `AT TIME ZONE 'Asia/Ho_Chi_Minh'`, bỏ độ lệch theo múi giờ server. Migration đã chạy trên DB thật ngày 07/11/2026 do dev server tự chạy migration khi phát hiện file mới (chưa thử trên bản sao trước như kế hoạch); đã kiểm tra lại dữ liệu sau khi chạy: mốc thời gian khớp với giá trị ghi nhận trước đó. Bài học: tắt `DB_MIGRATIONS_RUN` hoặc dừng dev server trước khi thêm migration.
 - Đo trên DB tạm 100.000 event (một máy dev, 15 lần mỗi truy vấn): p95 cao nhất 295 ms (khung giờ đăng, cả năm); khoảng 30–90 ngày dưới 150 ms. Truy vấn dùng index `eventDate` có sẵn, nên chưa thêm index.
 
 ### Rủi ro

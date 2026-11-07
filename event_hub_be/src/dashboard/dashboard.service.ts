@@ -22,7 +22,6 @@ const DEFAULT_RANGE_DAYS = 7;
 const PROMO_WINDOW_DAYS = 14;
 /** Nguồn nội bộ, không phải đối thủ: mặc định không tính vào dashboard. */
 const OWN_SOURCE_IDS = ['minhtuan'];
-const VN_OFFSET_MIN = 7 * 60;
 
 export type ResolvedFilter = {
   /** Ngày theo lịch Việt Nam, dạng YYYY-MM-DD (tính cả hai đầu). */
@@ -57,15 +56,6 @@ export class DashboardService {
     private readonly settingRepository: Repository<Setting>,
     private readonly eventsService: EventsService,
   ) {}
-
-  /**
-   * Cột eventDate là timestamp không múi giờ: giá trị lưu là giờ địa phương của process ghi.
-   * Cộng độ lệch này để ra giờ Việt Nam khi nhóm theo ngày/giờ trong SQL.
-   * Bỏ được khi chuyển cột sang timestamptz.
-   */
-  static vnShiftMinutes(now = new Date()): number {
-    return VN_OFFSET_MIN + now.getTimezoneOffset();
-  }
 
   async resolveFilter(
     dto: DashboardFilterDto,
@@ -137,7 +127,9 @@ export class DashboardService {
   }
 
   private vnExpr() {
-    return `(e."eventDate" + make_interval(mins => ${DashboardService.vnShiftMinutes()}))`;
+    // eventDate là timestamptz: đổi sang giờ Việt Nam để nhóm theo ngày/giờ, không phụ thuộc
+    // múi giờ của server hay của phiên Postgres.
+    return `(e."eventDate" AT TIME ZONE 'Asia/Ho_Chi_Minh')`;
   }
 
   /** Chỉ số tổng: kỳ này, kỳ trước cùng độ dài, theo hãng, khuyến mãi gần đây, tình trạng nguồn. */

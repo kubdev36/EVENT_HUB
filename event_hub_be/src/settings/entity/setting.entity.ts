@@ -12,6 +12,6 @@ export class Setting {
   @Column({ type: 'jsonb', nullable: true })
   value: any;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }
