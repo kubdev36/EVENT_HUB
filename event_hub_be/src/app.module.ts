@@ -6,6 +6,7 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CrawlersModule } from './crawlers/crawlers.module.js';
 import { EventsModule } from './events/events.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 import { UsersModule } from './users/users.module.js';
 import { migrations } from './migrations/index.js';
@@ -41,6 +42,7 @@ import { validateEnv } from './config/env.validation.js';
     SettingsModule,
     CrawlersModule,
     EventsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

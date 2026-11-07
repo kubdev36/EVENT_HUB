@@ -6,6 +6,7 @@ import { CreateEventDto } from '../dto/create-event.dto.js';
 import { Event } from '../entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
 import { Role } from '../../auth/enums/role.enum.js';
+import { expandEventType } from '../event-types.js';
 
 type RequestUser = {
   id: string;
@@ -278,16 +279,7 @@ export class EventsService {
       .map((rule) => String(rule.type || '').trim())
       .filter(Boolean);
 
-    return Array.from(new Set(configuredTypes.flatMap((type) => this.expandEventType(type))));
-  }
-
-  private expandEventType(type: string): string[] {
-    const normalized = type.trim();
-    if (normalized === 'promo') return ['promo', 'sale'];
-    if (normalized === 'sale') return ['sale', 'promo'];
-    if (normalized === 'live') return ['live', 'livestream'];
-    if (normalized === 'livestream') return ['livestream', 'live'];
-    return [normalized];
+    return Array.from(new Set(configuredTypes.flatMap((type) => expandEventType(type))));
   }
 
   private normalizeDepartment(value?: string | null): string {

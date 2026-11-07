@@ -258,6 +258,14 @@ Số đo một lần chạy thật (4 nguồn, chỉ link web), là số đo đ�
 
 Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễn tập rollback và khôi phục DB (cần môi trường triển khai).
 
+### Tiến độ giai đoạn 4: API dashboard mới (07/11/2026)
+
+- Thêm `GET /dashboard/summary`, `/dashboard/timeseries`, `/dashboard/breakdown?by=type|weekday-hour|week`, `/dashboard/events` (con trỏ, tối đa 100 dòng, không trả `rawData`). API cũ `/events/overview`, `/events/by-date` giữ nguyên cho các trang chưa làm lại.
+- Đếm bằng SQL theo giờ Việt Nam. Quyền phòng ban nằm trong điều kiện truy vấn, sửa lỗi thiếu bài khi vượt 5.000 dòng (có test 6.000 bài).
+- `eventDate` đang là `timestamp` không múi giờ, giá trị là giờ địa phương của process ghi; SQL cộng độ lệch để ra giờ Việt Nam. Test chạy đúng với `TZ=UTC` và `TZ=Asia/Ho_Chi_Minh`. Chuyển sang `timestamptz` để bỏ độ lệch này là việc riêng.
+- Test trên Postgres thật: `src/dashboard/dashboard.service.db.spec.ts`, chạy khi đặt `DASHBOARD_TEST_DB` (DB tạm, test xóa bảng).
+- Đo trên DB tạm 100.000 event (một máy dev, 15 lần mỗi truy vấn): p95 cao nhất 295 ms (khung giờ đăng, cả năm); khoảng 30–90 ngày dưới 150 ms. Truy vấn dùng index `eventDate` có sẵn, nên chưa thêm index.
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |
