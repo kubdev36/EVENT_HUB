@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import { CrawlTarget, ParsedCrawlItem } from '../crawler.types.js';
+import {
+  ApiSourceConfig,
+  CrawlTarget,
+  ParsedCrawlItem,
+} from '../crawler.types.js';
 import { CrawlerHttpClient, CrawlFetchError } from './crawler-http.client.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
@@ -12,25 +16,19 @@ export class GenericApiEngine {
 
   constructor(private readonly httpClient: CrawlerHttpClient) {}
 
-  /** Nguồn có phần lấy qua API (Sforum GraphQL hoặc AJAX đã cấu hình) hay không. */
+  /** Nguồn có phần lấy qua API (cấu hình `api` hoặc AJAX) hay không. */
   appliesTo(target: CrawlTarget): boolean {
-    return this.isSforum(target) || Boolean(target.ajaxEndpoint);
-  }
-
-  private isSforum(target: CrawlTarget): boolean {
-    return Boolean(
-      target.targetUrls?.some(
-        (u) => u.includes('cellphones.com.vn') || u.includes('sforum.vn'),
-      ),
+    return (
+      target.api?.type === 'sforum-graphql' || Boolean(target.ajaxEndpoint)
     );
   }
 
   async fetchApiItems(target: CrawlTarget): Promise<ParsedCrawlItem[]> {
     const items: ParsedCrawlItem[] = [];
 
-    // 1. Check if Sforum GraphQL target
-    if (this.isSforum(target)) {
-      items.push(...(await this.fetchSforumGraphQL(target)));
+    // 1. API GraphQL kiểu Sforum, cấu hình trong nguồn
+    if (target.api?.type === 'sforum-graphql') {
+      items.push(...(await this.fetchSforumGraphQL(target, target.api)));
     }
 
     // 2. Custom AJAX endpoint configured in Target
@@ -45,21 +43,40 @@ export class GenericApiEngine {
 
   private async fetchSforumGraphQL(
     target: CrawlTarget,
+    api: ApiSourceConfig,
   ): Promise<ParsedCrawlItem[]> {
     const items: ParsedCrawlItem[] = [];
-    const SFORUM_GQL = 'https://api.sforum.vn/graphql/query';
-    const categoryIds = [10078, 27510]; // Khuyến mãi, Sự kiện
-    const gqlHeaders = {
+    const SFORUM_GQL = api.endpoint;
+    if (!/^https:\/\//i.test(SFORUM_GQL)) {
+      throw new CrawlFetchError(
+        'failed',
+        SFORUM_GQL,
+        'API endpoint phải là https',
+      );
+    }
+    // categoryIds được chèn vào câu query nên chỉ nhận số nguyên dương.
+    const categoryIds = (api.categoryIds || []).filter(
+      (id) => Number.isInteger(id) && id > 0,
+    );
+    if (categoryIds.length === 0) {
+      throw new CrawlFetchError(
+        'failed',
+        SFORUM_GQL,
+        'Thiếu categoryIds hợp lệ',
+      );
+    }
+    const maxPages = Math.min(Math.max(api.maxPages ?? 3, 1), 10);
+    const gqlHeaders: Record<string, string> = {
       'content-type': 'application/json',
       accept: 'application/json',
       'user-agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-      origin: 'https://cellphones.com.vn',
-      referer: 'https://cellphones.com.vn/sforum/khuyen-mai-soc',
+      origin: new URL(api.articleBaseUrl).origin,
+      referer: api.referer || api.articleBaseUrl,
     };
 
     for (const catId of categoryIds) {
-      for (let page = 1; page <= 3; page++) {
+      for (let page = 1; page <= maxPages; page++) {
         try {
           const gqlQuery = `
             query Posts {
@@ -102,7 +119,13 @@ export class GenericApiEngine {
           const meta = gqlJson?.data?.posts?.meta;
           if (!posts || posts.length === 0) break;
 
-          items.push(...GenericApiEngine.mapSforumPosts(posts, target));
+          items.push(
+            ...GenericApiEngine.mapSforumPosts(
+              posts,
+              target,
+              api.articleBaseUrl,
+            ),
+          );
 
           if (meta && meta.current_page >= meta.total_pages) break;
           await new Promise((r) => setTimeout(r, 400));
@@ -133,10 +156,15 @@ export class GenericApiEngine {
       published_at?: string;
     }>,
     target: CrawlTarget,
+    articleBaseUrl: string,
   ): ParsedCrawlItem[] {
     const items: ParsedCrawlItem[] = [];
+    const base = articleBaseUrl.endsWith('/')
+      ? articleBaseUrl
+      : `${articleBaseUrl}/`;
     for (const post of posts) {
-      const articleUrl = `https://cellphones.com.vn/sforum/${post.slug}`;
+      if (!post.slug || !/^[a-z0-9-]+$/i.test(post.slug)) continue;
+      const articleUrl = `${base}${post.slug}`;
       const title = NoiseFilterHelper.cleanTitle(post.title || '');
       if (!title || NoiseFilterHelper.isNoiseTitle(title)) continue;
 
@@ -151,7 +179,7 @@ export class GenericApiEngine {
         eventDate: published?.date ?? null,
         eventTime: published?.time ?? null,
         rawData: {
-          sourceUrl: target.targetUrls[0] || articleUrl,
+          sourceUrl: target.targetUrls?.[0] || base,
           sforumId: post.id,
         },
       });

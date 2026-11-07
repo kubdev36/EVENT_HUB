@@ -11,7 +11,9 @@ type Row = Record<string, unknown>;
 function memoryRepo(rows: Row[] = []) {
   const matches = (row: Row, where: Row) =>
     Object.entries(where).every(([k, v]) =>
-      v && typeof v === 'object' && '_type' in (v as object) ? row[k] == null : row[k] === v,
+      v && typeof v === 'object' && '_type' in (v as object)
+        ? row[k] == null
+        : row[k] === v,
     );
   return {
     rows,
@@ -22,8 +24,11 @@ function memoryRepo(rows: Row[] = []) {
       return row;
     }),
     findOne: async ({ where }: { where: Row | Row[] }) =>
-      rows.find((r) => (Array.isArray(where) ? where : [where]).some((w) => matches(r, w))) ?? null,
-    find: async ({ where }: { where?: Row } = {}) => rows.filter((r) => !where || matches(r, where)),
+      rows.find((r) =>
+        (Array.isArray(where) ? where : [where]).some((w) => matches(r, w)),
+      ) ?? null,
+    find: async ({ where }: { where?: Row } = {}) =>
+      rows.filter((r) => !where || matches(r, where)),
   };
 }
 
@@ -31,6 +36,7 @@ function build(opts: {
   items?: Record<string, ParsedCrawlItem[] | Error>;
   telegram?: { sendMessage?: jest.Mock; sendPhoto?: jest.Mock };
   events?: Row[];
+  detailPages?: Record<string, string>;
 }) {
   const eventRepo = memoryRepo(opts.events);
   const runRepo = memoryRepo();
@@ -39,10 +45,24 @@ function build(opts: {
     const v = opts.items?.[url];
     return v instanceof Error ? Promise.reject(v) : Promise.resolve(v ?? []);
   };
-  const engine = { fetchRssOrSitemap: fromMap, fetchHtmlItems: fromMap, fetchActiveAds: fromMap };
+  const engine = {
+    fetchRssOrSitemap: fromMap,
+    fetchHtmlItems: fromMap,
+    fetchActiveAds: fromMap,
+  };
   const telegram = {
-    sendMessage: opts.telegram?.sendMessage ?? jest.fn(async () => ({ ok: true })),
+    sendMessage:
+      opts.telegram?.sendMessage ?? jest.fn(async () => ({ ok: true })),
     sendPhoto: opts.telegram?.sendPhoto ?? jest.fn(async () => ({ ok: true })),
+  };
+  const httpClient = {
+    requestCount: 0,
+    fetchPage: jest.fn(async (url: string) => {
+      const html = opts.detailPages?.[url];
+      return html
+        ? { kind: 'ok', url, html }
+        : { kind: 'failed', url, reason: 'HTTP 404' };
+    }),
   };
   const service = new CrawlerService(
     eventRepo as never,
@@ -54,10 +74,10 @@ function build(opts: {
     { appliesTo: () => false } as never,
     engine as never,
     engine as never,
-    { requestCount: 0 } as never,
+    httpClient as never,
   );
   service.urlDelayMs = 0;
-  return { service, eventRepo, runRepo, telegram };
+  return { service, eventRepo, runRepo, telegram, httpClient };
 }
 
 const promo = (over: Partial<ParsedCrawlItem> = {}): ParsedCrawlItem => ({
@@ -66,7 +86,11 @@ const promo = (over: Partial<ParsedCrawlItem> = {}): ParsedCrawlItem => ({
   ...over,
 });
 
-const source = (urls: string[]): CrawlTarget => ({ id: 'shop', name: 'Shop', targetUrls: urls });
+const source = (urls: string[]): CrawlTarget => ({
+  id: 'shop',
+  name: 'Shop',
+  targetUrls: urls,
+});
 
 describe('CrawlerService', () => {
   describe('notifyPendingEvents', () => {
@@ -86,7 +110,12 @@ describe('CrawlerService', () => {
       const event = pending();
       const { service } = build({
         events: [event],
-        telegram: { sendMessage: jest.fn(async () => ({ ok: false, description: 'Bad Request' })) },
+        telegram: {
+          sendMessage: jest.fn(async () => ({
+            ok: false,
+            description: 'Bad Request',
+          })),
+        },
       });
       const summary = await service.notifyPendingEvents(0);
       expect(event.notifiedAt).toBeNull();
@@ -97,7 +126,11 @@ describe('CrawlerService', () => {
       const event = pending();
       const { service } = build({
         events: [event],
-        telegram: { sendMessage: jest.fn(async () => Promise.reject(new Error('ECONNRESET'))) },
+        telegram: {
+          sendMessage: jest.fn(async () =>
+            Promise.reject(new Error('ECONNRESET')),
+          ),
+        },
       });
       await service.notifyPendingEvents(0);
       expect(event.notifiedAt).toBeNull();
@@ -111,11 +144,14 @@ describe('CrawlerService', () => {
     });
 
     it('ảnh lỗi thì gửi lại dạng chữ', async () => {
-      const event = { ...pending(), image: 'https://cdn.vn/a.jpg' };
+      const event: Row = { ...pending(), image: 'https://cdn.vn/a.jpg' };
       const sendMessage = jest.fn(async () => ({ ok: true }));
       const { service } = build({
         events: [event],
-        telegram: { sendPhoto: jest.fn(async () => ({ ok: false })), sendMessage },
+        telegram: {
+          sendPhoto: jest.fn(async () => ({ ok: false })),
+          sendMessage,
+        },
       });
       await service.notifyPendingEvents(0);
       expect(sendMessage).toHaveBeenCalledTimes(1);
@@ -126,7 +162,9 @@ describe('CrawlerService', () => {
       const event = pending();
       const { service } = build({
         events: [event],
-        telegram: { sendMessage: jest.fn(async () => ({ ok: false, skipped: true })) },
+        telegram: {
+          sendMessage: jest.fn(async () => ({ ok: false, skipped: true })),
+        },
       });
       const summary = await service.notifyPendingEvents(0);
       expect(summary.skipped).toBe(true);
@@ -137,7 +175,10 @@ describe('CrawlerService', () => {
       const event = pending();
       const sendMessage = jest.fn(async () => ({ ok: true }));
       const { service } = build({ events: [event], telegram: { sendMessage } });
-      await Promise.all([service.notifyPendingEvents(0), service.notifyPendingEvents(0)]);
+      await Promise.all([
+        service.notifyPendingEvents(0),
+        service.notifyPendingEvents(0),
+      ]);
       expect(sendMessage).toHaveBeenCalledTimes(1);
     });
 
@@ -145,7 +186,9 @@ describe('CrawlerService', () => {
       const url = 'https://shop.vn/feed';
       const sendMessage = jest.fn(async () => ({ ok: true }));
       const { service, eventRepo } = build({
-        items: { [url]: [promo({ eventDate: new Date('2026-11-05T01:30:00Z') })] },
+        items: {
+          [url]: [promo({ eventDate: new Date('2026-11-05T01:30:00Z') })],
+        },
         telegram: { sendMessage },
       });
       await service.crawlSource(source([url]));
@@ -154,7 +197,10 @@ describe('CrawlerService', () => {
     });
 
     it('escape HTML từ nội dung crawl và bỏ link không phải http(s)', () => {
-      const msg = CrawlerService.buildTelegramMessage({ ...pending(), url: 'javascript:alert(1)' } as unknown as Event);
+      const msg = CrawlerService.buildTelegramMessage({
+        ...pending(),
+        url: 'javascript:alert(1)',
+      } as unknown as Event);
       expect(msg).toContain('Ưu đãi &lt;b&gt;lớn&lt;/b&gt;');
       expect(msg).not.toContain('javascript:');
     });
@@ -166,22 +212,40 @@ describe('CrawlerService', () => {
       const { service, eventRepo } = build({ items: { [url]: [promo()] } });
       const result = await service.crawlTarget(source([url]));
       expect(result.newItems).toBe(1);
-      expect(eventRepo.rows[0]).toMatchObject({ eventDate: null, eventTime: null, dateUnknown: true });
+      expect(eventRepo.rows[0]).toMatchObject({
+        eventDate: null,
+        eventTime: null,
+        dateUnknown: true,
+      });
     });
 
     it('có ngày đăng thì dateUnknown = false', async () => {
       const url = 'https://shop.vn/feed';
       const eventDate = new Date('2026-11-05T01:30:00Z');
-      const { service, eventRepo } = build({ items: { [url]: [promo({ eventDate, eventTime: '08:30' })] } });
+      const { service, eventRepo } = build({
+        items: { [url]: [promo({ eventDate, eventTime: '08:30' })] },
+      });
       await service.crawlTarget(source([url]));
-      expect(eventRepo.rows[0]).toMatchObject({ eventDate, eventTime: '08:30', dateUnknown: false });
+      expect(eventRepo.rows[0]).toMatchObject({
+        eventDate,
+        eventTime: '08:30',
+        dateUnknown: false,
+      });
     });
 
     it('quảng cáo Meta khác adArchiveID không ghi đè nhau; crawl lại không tạo trùng', async () => {
       const url = 'https://facebook.com/shop';
       const ads = [
-        promo({ url: 'https://www.facebook.com/ads/library/?id=1', externalId: '1', title: 'Khuyến mãi giảm giá đợt 1' }),
-        promo({ url: 'https://www.facebook.com/ads/library/?id=2', externalId: '2', title: 'Khuyến mãi giảm giá đợt 2' }),
+        promo({
+          url: 'https://www.facebook.com/ads/library/?id=1',
+          externalId: '1',
+          title: 'Khuyến mãi giảm giá đợt 1',
+        }),
+        promo({
+          url: 'https://www.facebook.com/ads/library/?id=2',
+          externalId: '2',
+          title: 'Khuyến mãi giảm giá đợt 2',
+        }),
       ];
       const { service, eventRepo } = build({ items: { [url]: ads } });
       await service.crawlTarget(source([url]));
@@ -192,17 +256,25 @@ describe('CrawlerService', () => {
 
     it('nguồn bị chặn không báo success', async () => {
       const url = 'https://shop.vn/tin-tuc';
-      const { service, runRepo } = build({ items: { [url]: new CrawlFetchError('blocked', url, 'HTTP 403') } });
+      const { service, runRepo } = build({
+        items: { [url]: new CrawlFetchError('blocked', url, 'HTTP 403') },
+      });
       const result = await service.crawlTarget(source([url]));
       expect(result.status).toBe('blocked');
-      expect(runRepo.rows[0]).toMatchObject({ status: 'blocked', errorMessage: expect.stringContaining('HTTP 403') });
+      expect(runRepo.rows[0]).toMatchObject({
+        status: 'blocked',
+        errorMessage: expect.stringContaining('HTTP 403'),
+      });
     });
 
     it('một URL lỗi, URL khác thành công thì báo partial và vẫn lưu bài', async () => {
       const ok = 'https://shop.vn/feed';
       const bad = 'https://shop.vn/tin-tuc';
       const { service, eventRepo } = build({
-        items: { [ok]: [promo()], [bad]: new CrawlFetchError('failed', bad, 'timeout') },
+        items: {
+          [ok]: [promo()],
+          [bad]: new CrawlFetchError('failed', bad, 'timeout'),
+        },
       });
       const result = await service.crawlTarget(source([ok, bad]));
       expect(result.status).toBe('partial');
@@ -217,6 +289,129 @@ describe('CrawlerService', () => {
     });
   });
 
+  describe('crawl hai bước', () => {
+    const list = 'https://shop.vn/tin-tuc';
+    const articleHtml = (date: string) =>
+      `<html><head><script type="application/ld+json">{"@type":"NewsArticle","datePublished":"${date}"}</script>` +
+      `<meta property="og:image" content="https://cdn.shop.vn/a.jpg"></head></html>`;
+    const withDetail = (urls: string[]) => ({
+      ...source([list]),
+      extract: { fetchDetail: true, maxDetailPerRun: 2, detailDelayMs: 0 },
+      targetUrls: [list],
+      _urls: urls,
+    });
+
+    it('tải trang chi tiết của bài mới để lấy ngày đăng và ảnh', async () => {
+      const url = 'https://shop.vn/tin-tuc/khuyen-mai-1';
+      const { service, eventRepo } = build({
+        items: { [list]: [promo({ url })] },
+        detailPages: { [url]: articleHtml('2026-11-04T04:03:01+00:00') },
+      });
+      await service.crawlTarget(withDetail([url]));
+      expect(eventRepo.rows[0]).toMatchObject({
+        dateUnknown: false,
+        eventTime: '11:03',
+        image: 'https://cdn.shop.vn/a.jpg',
+      });
+    });
+
+    it('giới hạn số trang chi tiết mỗi lần; bài còn lại lưu dateUnknown', async () => {
+      const items = [1, 2, 3].map((n) =>
+        promo({
+          url: `https://shop.vn/tin-tuc/khuyen-mai-${n}`,
+          title: `Khuyến mãi giảm giá đợt số ${n}`,
+        }),
+      );
+      const { service, eventRepo, httpClient } = build({
+        items: { [list]: items },
+      });
+      await service.crawlTarget(withDetail([]));
+      expect(httpClient.fetchPage).toHaveBeenCalledTimes(2);
+      expect(eventRepo.rows.every((r) => r.dateUnknown === true)).toBe(true);
+    });
+
+    it('lần cào sau bổ sung ngày cho bài cũ chưa rõ ngày, không tải lại bài đã có ngày', async () => {
+      const url = 'https://shop.vn/tin-tuc/khuyen-mai-1';
+      const old = {
+        id: 'e1',
+        sourceId: 'shop',
+        url,
+        title: 'x',
+        dateUnknown: true,
+        eventDate: null,
+        eventTime: null,
+      };
+      const { service, httpClient } = build({
+        events: [old],
+        items: { [list]: [promo({ url })] },
+        detailPages: { [url]: articleHtml('2026-11-06T00:00:00+07:00') },
+      });
+      await service.crawlTarget(withDetail([url]));
+      expect(old.dateUnknown).toBe(false);
+      expect(old.eventTime).toBeNull();
+      await service.crawlTarget(withDetail([url]));
+      expect(httpClient.fetchPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('ưu tiên tải trang chi tiết cho bài mới trước bài cũ chưa rõ ngày', async () => {
+      const oldUrls = [1, 2].map((n) => `https://shop.vn/tin-tuc/cu-${n}`);
+      const newUrl = 'https://shop.vn/tin-tuc/moi-1';
+      const events = oldUrls.map((url, i) => ({
+        id: `old-${i}`,
+        sourceId: 'shop',
+        url,
+        title: 'x',
+        dateUnknown: true,
+        eventDate: null,
+      }));
+      const items = [
+        ...oldUrls.map((url, i) =>
+          promo({ url, title: `Khuyến mãi giảm giá bài cũ ${i}` }),
+        ),
+        promo({ url: newUrl, title: 'Khuyến mãi giảm giá bài mới' }),
+      ];
+      const { service, httpClient } = build({
+        events,
+        items: { [list]: items },
+      });
+      await service.crawlTarget({
+        ...source([list]),
+        extract: { fetchDetail: true, maxDetailPerRun: 1, detailDelayMs: 0 },
+      });
+      expect(httpClient.fetchPage).toHaveBeenCalledTimes(1);
+      expect(httpClient.fetchPage).toHaveBeenCalledWith(newUrl);
+    });
+
+    it('nguồn bật fetchDetail lấy ngày từ trang chi tiết, không dùng ngày đoán từ tiêu đề', async () => {
+      const url = 'https://shop.vn/tin-tuc/sim-1';
+      const { service, eventRepo } = build({
+        items: {
+          [list]: [
+            promo({
+              url,
+              title: 'Khuyến mãi giảm giá SIM, áp dụng từ 01/11/2026',
+            }),
+          ],
+        },
+        detailPages: { [url]: articleHtml('2026-11-04T04:03:01+00:00') },
+      });
+      await service.crawlTarget({
+        ...source([list]),
+        extract: { fetchDetail: true, detailDelayMs: 0 },
+      });
+      expect(eventRepo.rows[0]).toMatchObject({
+        eventTime: '11:03',
+        dateUnknown: false,
+      });
+    });
+
+    it('nguồn không bật fetchDetail thì không tải trang chi tiết', async () => {
+      const { service, httpClient } = build({ items: { [list]: [promo()] } });
+      await service.crawlTarget(source([list]));
+      expect(httpClient.fetchPage).not.toHaveBeenCalled();
+    });
+  });
+
   describe('resolveRunStatus', () => {
     const blocked = new CrawlFetchError('blocked', 'u', 'r');
     const failed = new CrawlFetchError('failed', 'u', 'r');
@@ -226,7 +421,9 @@ describe('CrawlerService', () => {
       [[blocked, blocked], 2, 'blocked'],
       [[blocked, failed], 2, 'failed'],
     ] as const)('%#', (errors, attempts, expected) => {
-      expect(CrawlerService.resolveRunStatus([...errors], attempts)).toBe(expected);
+      expect(CrawlerService.resolveRunStatus([...errors], attempts)).toBe(
+        expected,
+      );
     });
   });
 });

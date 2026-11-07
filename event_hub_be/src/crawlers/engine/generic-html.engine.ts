@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import type { AnyNode } from 'domhandler';
-import { ParsedCrawlItem } from '../crawler.types.js';
-import { CrawlerHttpClient } from './crawler-http.client.js';
+import { ExtractConfig, ParsedCrawlItem } from '../crawler.types.js';
+import { CrawlerHttpClient, CrawlFetchError } from './crawler-http.client.js';
+
+const DEFAULT_IMAGE_ATTRS = [
+  'data-original',
+  'data-src',
+  'data-lazy-src',
+  'src',
+];
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
@@ -11,8 +17,28 @@ import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
 export class GenericHtmlEngine {
   constructor(private readonly httpClient: CrawlerHttpClient) {}
 
-  async fetchHtmlItems(url: string): Promise<ParsedCrawlItem[]> {
+  async fetchHtmlItems(
+    url: string,
+    extract?: ExtractConfig,
+  ): Promise<ParsedCrawlItem[]> {
     const resp = await this.httpClient.requirePage(url);
+
+    if (extract) {
+      const configured = GenericHtmlEngine.extractConfigured(
+        resp.html,
+        resp.url,
+        extract,
+      );
+      // Selector không khớp bài nào: thường do web đổi giao diện, báo lỗi để cảnh báo.
+      if (configured.length === 0) {
+        throw new CrawlFetchError(
+          'failed',
+          url,
+          'Cấu hình trích xuất không khớp bài nào (web có thể đã đổi giao diện)',
+        );
+      }
+      return configured;
+    }
 
     const $ = cheerio.load(resp.html);
     const items: ParsedCrawlItem[] = [];
@@ -29,6 +55,117 @@ export class GenericHtmlEngine {
     }
 
     return items;
+  }
+
+  /**
+   * Trích xuất theo cấu hình của nguồn. Chỉ nhận link cùng domain với trang nguồn
+   * và khớp articleUrlPattern (nếu có). Nhiều link cùng URL được gộp thành một bài.
+   */
+  static extractConfigured(
+    html: string,
+    sourceUrl: string,
+    cfg: ExtractConfig,
+    referenceDate: Date = new Date(),
+  ): ParsedCrawlItem[] {
+    const $ = cheerio.load(html);
+    let pattern: RegExp | null = null;
+    if (cfg.articleUrlPattern) {
+      try {
+        pattern = new RegExp(cfg.articleUrlPattern);
+      } catch (err) {
+        throw new CrawlFetchError(
+          'failed',
+          sourceUrl,
+          `articleUrlPattern không hợp lệ: ${(err as Error).message}`,
+        );
+      }
+    }
+    const sourceHost = new URL(sourceUrl).hostname.replace(/^www\./, '');
+    const byUrl = new Map<string, ParsedCrawlItem>();
+
+    const blocks = cfg.itemSelector ? $(cfg.itemSelector) : $('a[href]');
+    blocks.each((_, el) => {
+      const block = $(el);
+      const link = block.is('a[href]')
+        ? block
+        : block.find(cfg.linkSelector || 'a[href]').first();
+      const href = link.attr('href');
+      if (!href) return;
+
+      let parsed: URL;
+      try {
+        parsed = new URL(href, sourceUrl);
+      } catch {
+        return; // href không phải URL hợp lệ: bỏ qua link này
+      }
+      if (!/^https?:$/.test(parsed.protocol)) return;
+      const host = parsed.hostname.replace(/^www\./, '');
+      if (host !== sourceHost && !host.endsWith(`.${sourceHost}`)) return;
+      if (pattern && !pattern.test(parsed.pathname)) return;
+
+      const titleNode = cfg.titleSelector
+        ? block.find(cfg.titleSelector).first()
+        : block.find('h1, h2, h3, h4').first();
+      const rawTitle =
+        titleNode.text() ||
+        link.attr('title') ||
+        block.find('img').first().attr('alt') ||
+        link.text();
+      const title = NoiseFilterHelper.cleanTitle(
+        (rawTitle || '').replace(/\s+/g, ' ').trim(),
+      );
+      const image = GenericHtmlEngine.pickImage(
+        block.find('img').first(),
+        cfg.imageAttrs,
+      );
+      const url = parsed.toString();
+      const published = cfg.dateSelector
+        ? DateExtractorHelper.parsePublishedDate(
+            block.find(cfg.dateSelector).first().text(),
+            referenceDate,
+          )
+        : null;
+
+      const prev = byUrl.get(url);
+      if (prev) {
+        // Gộp: giữ tiêu đề dài hơn, ảnh đầu tiên tìm được.
+        if (title.length > prev.title.length) prev.title = title;
+        if (!prev.image && image)
+          prev.image = UrlNormalizerHelper.resolveUrl(sourceUrl, image);
+        if (!prev.eventDate && published) {
+          prev.eventDate = published.date;
+          prev.eventTime = published.time;
+        }
+        return;
+      }
+      byUrl.set(url, {
+        title,
+        url,
+        image: image ? UrlNormalizerHelper.resolveUrl(sourceUrl, image) : null,
+        description: null,
+        eventDate: published?.date ?? null,
+        eventTime: published?.time ?? null,
+        rawData: { sourceUrl, kind: 'configured-html' },
+      });
+    });
+
+    return [...byUrl.values()].filter(
+      (item) => item.title && !NoiseFilterHelper.isNoiseTitle(item.title),
+    );
+  }
+
+  /** Lấy ảnh theo thứ tự thuộc tính; bỏ ảnh nhúng data: (thường là ảnh chờ lazy-load) và ảnh nhiễu. */
+  static pickImage(
+    img: ReturnType<cheerio.CheerioAPI>,
+    attrs: string[] = DEFAULT_IMAGE_ATTRS,
+  ): string | null {
+    for (const attr of attrs) {
+      const value = img.attr(attr)?.trim();
+      if (!value || value.startsWith('data:')) continue;
+      if (NoiseFilterHelper.isNoiseImage(value)) continue;
+      return value;
+    }
+    return null;
   }
 
   private extractNextJsPayload(
@@ -99,11 +236,7 @@ export class GenericHtmlEngine {
       const fullUrl = UrlNormalizerHelper.resolveUrl(sourceUrl, link);
       if (!UrlNormalizerHelper.isLikelyEventUrl(fullUrl)) return;
 
-      const img =
-        block.find('img').first().attr('src') ||
-        block.find('img').first().attr('data-src') ||
-        block.find('img').first().attr('data-original') ||
-        null;
+      const img = GenericHtmlEngine.pickImage(block.find('img').first());
 
       const dateText = block
         .find('time, .date, .time, span[class*="date"]')

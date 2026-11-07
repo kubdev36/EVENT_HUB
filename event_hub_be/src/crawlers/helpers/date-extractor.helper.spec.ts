@@ -21,7 +21,9 @@ describe('DateExtractorHelper', () => {
     });
 
     it('đọc RSS pubDate', () => {
-      const r = DateExtractorHelper.parsePublishedDate('Thu, 01 Oct 2026 07:15:28 +0000');
+      const r = DateExtractorHelper.parsePublishedDate(
+        'Thu, 01 Oct 2026 07:15:28 +0000',
+      );
       expect(r?.date.toISOString()).toBe('2026-10-01T07:15:28.000Z');
       expect(r?.time).toBe('14:15');
     });
@@ -38,7 +40,9 @@ describe('DateExtractorHelper', () => {
     });
 
     it('đọc định dạng tiếng Việt theo lịch Việt Nam', () => {
-      const cases: Array<[string, { year: number; month: number; day: number }]> = [
+      const cases: Array<
+        [string, { year: number; month: number; day: number }]
+      > = [
         ['Tháng 9 29, 2026', { year: 2026, month: 9, day: 29 }],
         ['15 Tháng 10, 2026', { year: 2026, month: 10, day: 15 }],
         ['ngày 3 tháng 11 năm 2026', { year: 2026, month: 11, day: 3 }],
@@ -60,7 +64,9 @@ describe('DateExtractorHelper', () => {
 
     it('"3 giờ trước" có giờ chính xác', () => {
       const r = DateExtractorHelper.parsePublishedDate('3 giờ trước', ref);
-      expect(r?.date.toISOString()).toBe(vn('2026-11-07T07:00:00').toISOString());
+      expect(r?.date.toISOString()).toBe(
+        vn('2026-11-07T07:00:00').toISOString(),
+      );
       expect(r?.time).toBe('07:00');
     });
 
@@ -73,34 +79,60 @@ describe('DateExtractorHelper', () => {
     it('bỏ ngày không tồn tại và năm ngoài khoảng', () => {
       expect(DateExtractorHelper.parsePublishedDate('31/02/2026')).toBeNull();
       expect(DateExtractorHelper.parsePublishedDate('2010-01-01')).toBeNull();
-      expect(DateExtractorHelper.parsePublishedDate('không có ngày')).toBeNull();
+      expect(
+        DateExtractorHelper.parsePublishedDate('không có ngày'),
+      ).toBeNull();
       expect(DateExtractorHelper.parsePublishedDate(null)).toBeNull();
     });
   });
 
   describe('parseDateFromUrl', () => {
     it('đọc ngày trong đường dẫn', () => {
-      const a = DateExtractorHelper.parseDateFromUrl('https://x.vn/2026/09/29/bai-viet');
+      const a = DateExtractorHelper.parseDateFromUrl(
+        'https://x.vn/2026/09/29/bai-viet',
+      );
       expect(a && vnDay(a.date)).toEqual({ year: 2026, month: 9, day: 29 });
-      const b = DateExtractorHelper.parseDateFromUrl('https://x.vn/khuyen-mai-29-09-2026.html');
+      const b = DateExtractorHelper.parseDateFromUrl(
+        'https://x.vn/khuyen-mai-29-09-2026.html',
+      );
       expect(b && vnDay(b.date)).toEqual({ year: 2026, month: 9, day: 29 });
       expect(a?.time).toBeNull();
     });
 
     it('không có ngày thì trả null', () => {
-      expect(DateExtractorHelper.parseDateFromUrl('https://x.vn/khuyen-mai')).toBeNull();
+      expect(
+        DateExtractorHelper.parseDateFromUrl('https://x.vn/khuyen-mai'),
+      ).toBeNull();
     });
   });
 
   describe('parseItemEventDate', () => {
+    it('bỏ ngày trong tương lai ở tiêu đề (hạn khuyến mãi, không phải ngày đăng)', () => {
+      const r = DateExtractorHelper.parseItemEventDate(
+        {
+          title: 'Mua SIM nhận ưu đãi 50% đến 31/12/2026',
+          url: 'https://x.vn/sim',
+        },
+        ref,
+      );
+      expect(r.isExplicit).toBe(false);
+      expect(r.date).toBeNull();
+    });
+
     it('không tìm được ngày thì trả date = null, time = null, không dùng ngày crawl', () => {
-      const r = DateExtractorHelper.parseItemEventDate({ title: 'Ưu đãi lớn tháng này', url: 'https://x.vn/uu-dai' }, ref);
+      const r = DateExtractorHelper.parseItemEventDate(
+        { title: 'Ưu đãi lớn tháng này', url: 'https://x.vn/uu-dai' },
+        ref,
+      );
       expect(r).toEqual({ date: null, time: null, isExplicit: false });
     });
 
     it('ưu tiên eventDate có sẵn và giữ eventTime null nếu nguồn không cho', () => {
       const date = vn('2026-10-01T12:00:00');
-      const r = DateExtractorHelper.parseItemEventDate({ title: 'x', url: 'https://x.vn', eventDate: date }, ref);
+      const r = DateExtractorHelper.parseItemEventDate(
+        { title: 'x', url: 'https://x.vn', eventDate: date },
+        ref,
+      );
       expect(r).toEqual({ date, time: null, isExplicit: true });
     });
   });

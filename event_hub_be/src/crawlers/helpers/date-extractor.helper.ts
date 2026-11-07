@@ -210,10 +210,13 @@ export class DateExtractorHelper {
       };
     }
 
-    // 1. Ngày trong mô tả hoặc tiêu đề
+    // 1. Ngày trong mô tả hoặc tiêu đề. Ngày trong tương lai thường là hạn khuyến mãi
+    //    ("ưu đãi đến 31/12"), không phải ngày đăng, nên bỏ qua.
+    const notFuture = (d: ParsedDate | null) =>
+      d && d.date.getTime() <= referenceDate.getTime() + DAY_MS ? d : null;
     const descDate =
-      this.parsePublishedDate(item.description, referenceDate) ||
-      this.parsePublishedDate(item.title, referenceDate);
+      notFuture(this.parsePublishedDate(item.description, referenceDate)) ||
+      notFuture(this.parsePublishedDate(item.title, referenceDate));
     if (descDate) return { ...descDate, isExplicit: true };
 
     // 2. Ngày trong đường dẫn URL

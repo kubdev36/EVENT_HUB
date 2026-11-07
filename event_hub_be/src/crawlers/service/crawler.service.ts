@@ -20,6 +20,7 @@ import { GenericRssEngine } from '../engine/generic-rss.engine.js';
 import { GenericApiEngine } from '../engine/generic-api.engine.js';
 import { GenericHtmlEngine } from '../engine/generic-html.engine.js';
 import { GenericMetaAdsEngine } from '../engine/generic-meta-ads.engine.js';
+import { ArticleDetailHelper } from '../helpers/article-detail.helper.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
@@ -181,6 +182,14 @@ export class CrawlerService {
       const rules = await this.getKeywordRules();
       const seen = new Set<string>();
       let newItemsCount = 0;
+      const detail = {
+        enabled: Boolean(target.extract?.fetchDetail),
+        remaining: Math.min(
+          Math.max(target.extract?.maxDetailPerRun ?? 10, 0),
+          50,
+        ),
+        delayMs: Math.max(target.extract?.detailDelayMs ?? 2000, 0),
+      };
 
       // Filter and deduplicate within current run
       const validItems: ParsedCrawlItem[] = [];
@@ -196,6 +205,14 @@ export class CrawlerService {
         validItems.push(item);
       }
 
+      // Bước 1: phân loại và tìm event đã có cho từng bài.
+      const prepared: Array<{
+        item: ParsedCrawlItem;
+        type: string;
+        contentHash: string;
+        externalId: string | null;
+        existing: Event | null;
+      }> = [];
       for (const item of validItems) {
         const type = this.classifierService.classify(
           item.title,
@@ -203,9 +220,6 @@ export class CrawlerService {
           rules,
         );
         if (!type) continue;
-
-        const dateInfo = DateExtractorHelper.parseItemEventDate(item);
-
         const contentHash = UrlNormalizerHelper.buildContentHash(
           target.id,
           item.url,
@@ -219,6 +233,42 @@ export class CrawlerService {
             { sourceId: target.id, contentHash },
           ],
         });
+        prepared.push({ item, type, contentHash, externalId, existing });
+      }
+
+      // Bước 2 (crawl hai bước): tải trang chi tiết để lấy ngày cho bài chưa có ngày,
+      // ưu tiên bài mới trước, sau đó mới đến bài cũ chưa rõ ngày; có giới hạn mỗi lần.
+      if (detail.enabled) {
+        const needDetail = prepared
+          .filter(
+            (p) =>
+              // Chỉ tin ngày do engine lấy từ dữ liệu có cấu trúc; ngày đoán từ tiêu đề không tính.
+              !p.item.eventDate &&
+              (!p.existing ||
+                p.existing.dateUnknown ||
+                // Ngày cũ nằm ở tương lai là ngày sai (vd. hạn khuyến mãi), cần lấy lại.
+                (p.existing.eventDate !== null &&
+                  new Date(p.existing.eventDate).getTime() >
+                    Date.now() + 86_400_000)),
+          )
+          .sort(
+            (a, b) => Number(Boolean(a.existing)) - Number(Boolean(b.existing)),
+          )
+          .slice(0, detail.remaining);
+        for (const p of needDetail) {
+          await this.enrichFromDetail(p.item, detail.delayMs);
+        }
+      }
+
+      // Bước 3: ghi DB.
+      for (const {
+        item,
+        type,
+        contentHash,
+        externalId,
+        existing,
+      } of prepared) {
+        const dateInfo = DateExtractorHelper.parseItemEventDate(item);
 
         if (existing) {
           existing.lastSeenAt = new Date();
@@ -414,7 +464,7 @@ export class CrawlerService {
         );
       } else {
         await attempt(targetUrl, () =>
-          this.htmlEngine.fetchHtmlItems(targetUrl),
+          this.htmlEngine.fetchHtmlItems(targetUrl, target.extract),
         );
       }
       if (this.urlDelayMs > 0)
@@ -422,6 +472,30 @@ export class CrawlerService {
     }
 
     return { items: allItems, errors, attempts };
+  }
+
+  /**
+   * Tải trang chi tiết để lấy ngày đăng và ảnh. Lỗi chỉ ghi log: bài vẫn được lưu
+   * với dateUnknown và sẽ thử lại ở lần cào sau.
+   */
+  private async enrichFromDetail(
+    item: ParsedCrawlItem,
+    delayMs: number,
+  ): Promise<boolean> {
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+    const page = await this.httpClient.fetchPage(item.url);
+    if (page.kind !== 'ok') {
+      this.logger.warn(
+        `Không lấy được trang chi tiết ${item.url}: ${page.reason}`,
+      );
+      return false;
+    }
+    const detail = ArticleDetailHelper.parse(page.html, page.url);
+    if (!item.image && detail.image) item.image = detail.image;
+    if (!detail.published) return false;
+    item.eventDate = detail.published.date;
+    item.eventTime = detail.published.time;
+    return true;
   }
 
   private async crawlTargetSafely(target: CrawlTarget) {
