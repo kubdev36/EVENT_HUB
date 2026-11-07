@@ -268,6 +268,16 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Migration `TimestampsToTimestamptz`: 13 cột thời gian chuyển sang `timestamptz`, quy đổi từ giờ +7 (Node và Postgres `Asia/Bangkok` đều +7). API dashboard dùng `AT TIME ZONE 'Asia/Ho_Chi_Minh'`, bỏ độ lệch theo múi giờ server. Migration đã chạy trên DB thật ngày 07/11/2026 do dev server tự chạy migration khi phát hiện file mới (chưa thử trên bản sao trước như kế hoạch); đã kiểm tra lại dữ liệu sau khi chạy: mốc thời gian khớp với giá trị ghi nhận trước đó. Bài học: tắt `DB_MIGRATIONS_RUN` hoặc dừng dev server trước khi thêm migration.
 - Đo trên DB tạm 100.000 event (một máy dev, 15 lần mỗi truy vấn): p95 cao nhất 295 ms (khung giờ đăng, cả năm); khoảng 30–90 ngày dưới 150 ms. Truy vấn dùng index `eventDate` có sẵn, nên chưa thêm index.
 
+### Lưu ảnh thu nhỏ (08/11/2026)
+
+- Đo ngày 07/11/2026 (script `backups/image-check`, 1.598 link): 98,7% ảnh còn tải được; ảnh web đối thủ không hỏng ảnh nào; 20 ảnh lỗi đều là ảnh quảng cáo Facebook (403). Chưa cần MinIO, nhưng về lâu dài link gốc có rủi ro đối thủ đổi CDN, gỡ bài cũ, chặn hotlink, nên lưu ảnh thu nhỏ khi crawl.
+- Module `src/images`: `ImageStoreService` tải ảnh qua `CrawlerHttpClient.fetchBinary` (chống SSRF mỗi bước chuyển hướng, chung hàng đợi giới hạn tốc độ, host ảnh CDN cách nhau ít nhất 1 giây, tối đa 10 MB), thu nhỏ bằng `sharp` (rộng tối đa 600px, WebP chất lượng 75, bỏ EXIF, giới hạn số điểm ảnh), không nhận SVG.
+- Lưu vào `IMAGE_STORE_DIR` (mặc định `event_hub_be/storage/images`), tên file `<sha256 của link>.webp`; interface `ImageStorage` để đổi sang MinIO sau này.
+- Chạy sau mỗi lần cào một nguồn, không làm chậm hay hỏng lần cào; mỗi lần tối đa 50 bài chưa thử lưu, bài mới trước, nên ảnh bài cũ được lưu dần. Kết quả ghi vào `imageStoreStatus` (`stored`, `failed`, `blocked`, `skipped`). Bài `failed` chưa tự thử lại.
+- Nguồn `facebook` mặc định không lưu ảnh (`skipped`) đến khi xem xong điều khoản của Meta; cấu hình nguồn `storeImages` ghi đè mặc định.
+- `GET /images/:name` không cần đăng nhập (thẻ `<img>` không gửi token; tên file khó đoán, ảnh vốn công khai). Chuyển sang bắt đăng nhập khi có cookie httpOnly. API `/dashboard/events` trả thêm `imageLocal`; frontend ưu tiên ảnh đã lưu, không có thì dùng link gốc.
+- Migration `AddEventImageStore` thêm 3 cột; đã thử trên DB tạm (chạy, so schema với entity, hoàn tác, chạy lại).
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

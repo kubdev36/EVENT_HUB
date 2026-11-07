@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const api = axios.create({
   baseURL: API_URL,
@@ -51,13 +51,19 @@ export const eventsApi = {
   create: (payload) => api.post('/events', payload),
 };
 
+/** crawler_sources trong DB có thể là mảng hoặc { targets } / { sources }; luôn trả mảng. */
+export function toCrawlerList(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.targets)) return value.targets;
+  if (Array.isArray(value?.sources)) return value.sources;
+  return [];
+}
+
 export const settingsApi = {
   getAll: () => api.get('/settings'),
   getCrawlerSources: () =>
     api.get('/settings').then((response) => {
-      const value = response.data?.crawler_sources;
-      const sources = Array.isArray(value) ? value : value?.sources || value?.targets || [];
-      return { ...response, data: sources };
+      return { ...response, data: toCrawlerList(response.data?.crawler_sources) };
     }),
   saveCrawlers: (payload) => api.post('/settings/crawlers', payload),
   saveTelegram: (payload) => api.post('/settings/telegram', payload),

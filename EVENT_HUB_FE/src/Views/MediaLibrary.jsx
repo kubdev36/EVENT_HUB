@@ -10,7 +10,7 @@ import {
   Calendar,
   Clock
 } from 'lucide-react';
-import { useImageEvents, useSources } from '../API/useDashboardEvents';
+import { eventImage, useImageEvents, useSources } from '../API/useDashboardEvents';
 import { addDays, vnToday } from './dashboard/shared';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
@@ -47,7 +47,7 @@ export default function MediaLibrary() {
           id: `${e.sourceId}-${e.id}`,
           title: e.title,
           desc: e.description || '',
-          image: e.image,
+          image: eventImage(e),
           date: e.date,
           time: e.time,
           type: e.type,

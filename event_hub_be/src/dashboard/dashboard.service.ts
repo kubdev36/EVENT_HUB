@@ -5,6 +5,7 @@ import { CrawlerRun } from '../crawlers/entity/crawler-run.entity.js';
 import { DateExtractorHelper } from '../crawlers/helpers/date-extractor.helper.js';
 import { Event } from '../events/entity/event.entity.js';
 import { expandEventType } from '../events/event-types.js';
+import { isValidImageName } from '../images/image-storage.js';
 import { EventsService } from '../events/service/events.service.js';
 import { Setting } from '../settings/entity/setting.entity.js';
 import { DashboardFilterDto } from './dto/dashboard-query.dto.js';
@@ -292,6 +293,7 @@ export class DashboardService {
         'e.title',
         'e.description',
         'e.image',
+        'e.imageStoredPath',
         'e.url',
         'e.type',
         'e.eventDate',
@@ -319,6 +321,10 @@ export class DashboardService {
         title: e.title,
         description: e.description ? e.description.slice(0, 300) : null,
         image: e.image && /^https?:\/\//i.test(e.image) ? e.image : null,
+        imageLocal:
+          e.imageStoredPath && isValidImageName(e.imageStoredPath)
+            ? `/images/${e.imageStoredPath}`
+            : null,
         url: /^https?:\/\//i.test(e.url) ? e.url : null,
         type: e.type,
         origin: e.origin,

@@ -21,6 +21,11 @@ export type CrawlSource = {
   api?: ApiSourceConfig;
   /** Khoảng cách tối thiểu (ms) giữa hai request tới domain của nguồn, vd. 5000 theo Crawl-delay. */
   minRequestIntervalMs?: number;
+  /**
+   * Lưu ảnh thu nhỏ của bài về máy chủ. Mặc định true với nguồn web, false với nguồn facebook
+   * (chưa xem xong điều khoản của Meta).
+   */
+  storeImages?: boolean;
 };
 
 /**

@@ -26,6 +26,7 @@ import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
 import { isDue, mapWithConcurrency } from '../helpers/schedule.helper.js';
 import { CrawlLockService } from './crawl-lock.service.js';
+import { ImageStoreService } from '../../images/image-store.service.js';
 
 /** Event có ngày đăng trước mốc này bị bỏ qua (dữ liệu cũ). */
 const MIN_EVENT_DATE = new Date('2025-01-01T00:00:00+07:00');
@@ -54,6 +55,9 @@ type EventPatch = Partial<
     | 'title'
     | 'description'
     | 'image'
+    | 'imageStoredPath'
+    | 'imageStoredAt'
+    | 'imageStoreStatus'
     | 'eventDate'
     | 'eventTime'
     | 'dateUnknown'
@@ -94,6 +98,7 @@ export class CrawlerService implements OnApplicationBootstrap {
     private readonly metaAdsEngine: GenericMetaAdsEngine,
     private readonly httpClient: CrawlerHttpClient,
     private readonly lockService: CrawlLockService,
+    private readonly imageStore: ImageStoreService,
   ) {}
 
   /** Khởi động lại sau khi process chết: dọn các lượt cào bị kẹt ở running. */
@@ -317,6 +322,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       run.newItems = newItemsCount;
       this.finishRun(run, startedMs, requestsBefore, hosts);
       await this.crawlerRunRepository.save(run);
+      this.storeImagesInBackground(target);
 
       return {
         sourceId: target.id,
@@ -335,6 +341,15 @@ export class CrawlerService implements OnApplicationBootstrap {
       await this.crawlerRunRepository.save(run);
       throw error;
     }
+  }
+
+  /** Lưu ảnh thu nhỏ sau lần cào, không chờ và không làm hỏng kết quả cào. Lỗi được ghi log. */
+  private storeImagesInBackground(target: CrawlTarget): void {
+    this.imageStore.storeForTarget(target).catch((err: unknown) =>
+      this.logger.warn(
+        `Lưu ảnh cho ${target.id} lỗi: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   /** Các host nguồn gọi tới; đặt khoảng cách tối thiểu theo cấu hình nguồn (vd. Crawl-delay). */
@@ -571,7 +586,13 @@ export class CrawlerService implements OnApplicationBootstrap {
       item.description !== existing.description
     )
       patch.description = item.description;
-    if (image && image !== existing.image) patch.image = image;
+    if (image && image !== existing.image) {
+      patch.image = image;
+      // Ảnh đổi thì ảnh đã lưu không còn đúng: xóa trạng thái để lưu lại ảnh mới.
+      patch.imageStoredPath = null;
+      patch.imageStoredAt = null;
+      patch.imageStoreStatus = null;
+    }
     // Chỉ cập nhật ngày khi tìm được ngày thật từ bài.
     if (
       dateInfo.isExplicit &&

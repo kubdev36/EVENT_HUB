@@ -1,6 +1,12 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { dashboardApi } from './API';
+import { API_URL, dashboardApi } from './API';
+
+/** Ảnh hiển thị của bài: ưu tiên ảnh thu nhỏ đã lưu trên máy chủ, không có thì dùng link gốc. */
+export function eventImage(e) {
+  if (e?.imageLocal && e.imageLocal.startsWith('/images/')) return `${API_URL}${e.imageLocal}`;
+  return e?.image || '';
+}
 
 /** Logo mặc định theo id/tên nguồn khi cấu hình chưa có logo. */
 export function fallbackLogo(id = '', name = '') {
@@ -51,7 +57,7 @@ const toEvent = (e) => ({
   title: e.title || '',
   fullTitle: e.title || '',
   desc: e.description || '',
-  image: e.image || '',
+  image: eventImage(e),
   url: e.url || '',
   origin: e.origin || 'crawler',
   sourceId: e.sourceId,

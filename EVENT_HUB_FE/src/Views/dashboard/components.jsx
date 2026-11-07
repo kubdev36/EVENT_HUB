@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { eventImage } from '../../API/useDashboardEvents';
 import { formatDay, heatColor, relativeTime, safeHttpUrl, typeLabel, useElementWidth } from './shared';
 
 // ---------- Khung ----------
@@ -424,7 +425,7 @@ export function EventFeed({ items, nameOf, colorOf }) {
         const href = safeHttpUrl(ev.url);
         return (
           <li key={ev.id} className={`flex gap-3 py-2.5 ${i ? 'border-t border-slate-100' : 'pt-0'}`}>
-            <EventThumb src={ev.image} />
+            <EventThumb src={eventImage(ev)} />
             <div className="min-w-0">
               {href ? (
                 <a href={href} target="_blank" rel="noopener noreferrer" className="text-[13px] font-semibold text-slate-900 hover:text-blue-700 line-clamp-2">

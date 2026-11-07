@@ -14,6 +14,10 @@ export type FetchPageResult =
   | { kind: 'blocked'; url: string; reason: string }
   | { kind: 'failed'; url: string; reason: string };
 
+export type FetchBinaryResult =
+  | { kind: 'ok'; url: string; contentType: string; body: Buffer }
+  | { kind: 'blocked' | 'failed'; url: string; reason: string };
+
 /** Lỗi tải trang chính của một URL nguồn. kind cho biết bị chặn hay lỗi khác. */
 export class CrawlFetchError extends Error {
   constructor(
@@ -189,6 +193,77 @@ export class CrawlerHttpClient {
     return { kind: 'failed', url, reason: lastReason };
   }
 
+  /**
+   * Tải file nhị phân (vd. ảnh) qua cùng hàng đợi giới hạn tốc độ và chống SSRF như trang HTML.
+   * Dừng đọc khi vượt maxBytes. 401/403/429 trả blocked, không thử vượt qua.
+   */
+  async fetchBinary(url: string, maxBytes: number): Promise<FetchBinaryResult> {
+    if (!url || !/^https?:\/\//i.test(url))
+      return { kind: 'failed', url, reason: 'URL không phải http(s)' };
+    let resp: Response;
+    try {
+      resp = await this.fetchFollowingSafeRedirects(url, (u) => ({
+        'user-agent': this.userAgents[0],
+        accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+        referer: `${new URL(u).origin}/`,
+      }));
+    } catch (err) {
+      return {
+        kind: 'failed',
+        url,
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
+    const cancel = () =>
+      resp.body
+        ?.cancel()
+        .catch((err: unknown) =>
+          this.logger.debug(`cancel body: ${String(err)}`),
+        );
+    if (!resp.ok) {
+      await cancel();
+      const blocked = [401, 403, 429].includes(resp.status);
+      return {
+        kind: blocked ? 'blocked' : 'failed',
+        url,
+        reason: `HTTP ${resp.status}`,
+      };
+    }
+    const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+    const declared = Number(resp.headers.get('content-length') || 0);
+    if (declared > maxBytes) {
+      await cancel();
+      return { kind: 'failed', url, reason: `File quá lớn (${declared} byte)` };
+    }
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      const reader = resp.body?.getReader();
+      if (!reader) return { kind: 'failed', url, reason: 'Không có nội dung' };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return {
+            kind: 'failed',
+            url,
+            reason: `File quá lớn (> ${maxBytes} byte)`,
+          };
+        }
+        chunks.push(value);
+      }
+    } catch (err) {
+      return {
+        kind: 'failed',
+        url,
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
+    return { kind: 'ok', url, contentType, body: Buffer.concat(chunks) };
+  }
+
   /** Kiểm tra URL an toàn (chống SSRF); dùng cho request gửi ngoài client này, vd. GraphQL. */
   async assertSafeUrl(url: string): Promise<URL> {
     return assertPublicHttpUrl(url, this.resolveHost);
@@ -197,13 +272,15 @@ export class CrawlerHttpClient {
   /** fetch tự xử lý chuyển hướng, kiểm tra lại URL an toàn ở mỗi bước. */
   private async fetchFollowingSafeRedirects(
     startUrl: string,
+    headersFor: (url: string) => Record<string, string> = (u) =>
+      this.buildHeaders(u),
   ): Promise<Response> {
     let current = startUrl;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       await assertPublicHttpUrl(current, this.resolveHost);
       await this.waitForSlot(current);
       const resp = await fetch(current, {
-        headers: this.buildHeaders(current),
+        headers: headersFor(current),
         redirect: 'manual',
         signal: AbortSignal.timeout(10000),
       });

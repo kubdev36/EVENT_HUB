@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bot, Users, Send, Sliders, Building2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { dashboardApi, settingsApi, usersApi } from '../API/API';
+import { dashboardApi, settingsApi, toCrawlerList, usersApi } from '../API/API';
 
 const RUN_STATUS = { success: 'thành công', partial: 'lỗi một phần', blocked: 'bị chặn', failed: 'lỗi', running: 'đang chạy' };
 /** "07/11 10:45 · thành công" từ lần cào gần nhất của nguồn. */
@@ -73,9 +73,7 @@ export default function Setting() {
           setDepartmentsList(settings.departments_list);
         }
         if (settings.crawler_sources) {
-          setCrawlers(
-            settings.crawler_sources.map((item) => ({ ...item }))
-          );
+          setCrawlers(toCrawlerList(settings.crawler_sources).map((item) => ({ ...item })));
         }
 
         const list = Array.isArray(usersRes.data) ? usersRes.data : [];
@@ -90,6 +88,7 @@ export default function Setting() {
           }))
         );
       } catch (err) {
+        console.error('Không tải được cấu hình:', err);
         setStatusMessage(err.response?.data?.message || 'Không tải được cấu hình.');
       }
     };
@@ -178,6 +177,7 @@ export default function Setting() {
         ...(c.ajaxEndpoint ? { ajaxEndpoint: c.ajaxEndpoint } : {}),
         ...(c.ajaxPayload ? { ajaxPayload: c.ajaxPayload } : {}),
         ...(c.minRequestIntervalMs !== undefined ? { minRequestIntervalMs: c.minRequestIntervalMs } : {}),
+        ...(typeof c.storeImages === 'boolean' ? { storeImages: c.storeImages } : {}),
       }));
       await settingsApi.saveCrawlers({ targets: cleanTargets });
       setStatusMessage('Đã lưu cấu hình Crawler thành công.');

@@ -90,6 +90,7 @@ function build(opts: {
         : { kind: 'failed', url, reason: 'HTTP 404' };
     }),
   };
+  const imageStore = { storeForTarget: jest.fn(async () => ({})) };
   // Khóa giả trong bộ nhớ, cùng hành vi với CrawlLockService: nguồn đang chạy thì bỏ qua.
   const held = new Set<string>();
   const lock = {
@@ -115,8 +116,17 @@ function build(opts: {
     engine as never,
     httpClient as never,
     lock as never,
+    imageStore as never,
   );
-  return { service, eventRepo, runRepo, telegram, httpClient, lock };
+  return {
+    service,
+    eventRepo,
+    runRepo,
+    telegram,
+    httpClient,
+    lock,
+    imageStore,
+  };
 }
 
 const promo = (over: Partial<ParsedCrawlItem> = {}): ParsedCrawlItem => ({
@@ -564,6 +574,39 @@ describe('CrawlerService', () => {
       expect(eventRepo.update).toHaveBeenCalledWith('e1', {
         title: 'Khuyến mãi giảm giá tiêu đề mới',
       });
+    });
+
+    it('ảnh của bài đổi thì xóa trạng thái ảnh đã lưu để lưu lại', () => {
+      const patch = CrawlerService.diffExisting(
+        {
+          title: 'A',
+          type: 'promo',
+          image: 'https://cdn.shop.vn/a.jpg',
+          imageStoredPath: 'x.webp',
+          imageStoreStatus: 'stored',
+        } as Event,
+        {
+          item: { title: 'A', url: 'https://shop.vn/a' },
+          type: 'promo',
+          externalId: null,
+          image: 'https://cdn.shop.vn/b.jpg',
+          dateInfo: { date: null, time: null, isExplicit: false },
+        },
+      );
+      expect(patch).toEqual({
+        image: 'https://cdn.shop.vn/b.jpg',
+        imageStoredPath: null,
+        imageStoredAt: null,
+        imageStoreStatus: null,
+      });
+    });
+
+    it('cào xong thì gọi lưu ảnh cho nguồn', async () => {
+      const { service, imageStore } = build({
+        items: { [list]: [promo({ url: 'https://shop.vn/tin-tuc/km-9' })] },
+      });
+      await service.crawlTarget(source([list]));
+      expect(imageStore.storeForTarget).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -181,6 +181,15 @@ export class CrawlerSourceItemDto {
   @Min(0)
   @Max(60000)
   minRequestIntervalMs?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Lưu ảnh thu nhỏ về máy chủ; mặc định true với web, false với facebook',
+  })
+  @IsOptional()
+  @IsBoolean()
+  storeImages?: boolean;
 }
 
 export class SaveCrawlerSourcesDto {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../API/API';
+import { eventImage } from '../API/useDashboardEvents';
 import { Card, Dot, EventThumb, HeatTable, KpiCard, Delta, Segmented, ShareBars, StatusBox, WeeklyBars } from './dashboard/components';
 import {
   addDays,
@@ -210,7 +211,7 @@ export default function Reports() {
                     <tr key={e.id} className="border-t border-slate-100">
                       <td className="py-2 px-2">
                         <div className="flex items-center gap-2.5 min-w-60">
-                          <EventThumb src={e.image} />
+                          <EventThumb src={eventImage(e)} />
                           <span className="line-clamp-2">{e.title}</span>
                         </div>
                       </td>
