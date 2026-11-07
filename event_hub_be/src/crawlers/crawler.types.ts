@@ -35,6 +35,8 @@ export type CrawlSource = {
 export type ExtractConfig = {
   itemSelector?: string;
   titleSelector?: string;
+  /** Lấy tiêu đề từ thuộc tính này (vd. "title") của phần tử titleSelector, khi chữ bên trong bị cắt hoặc rỗng. */
+  titleAttr?: string;
   linkSelector?: string;
   /** Phần tử chứa ngày đăng trong khối bài (vd. "5 ngày trước", "06/11/2026"). */
   dateSelector?: string;

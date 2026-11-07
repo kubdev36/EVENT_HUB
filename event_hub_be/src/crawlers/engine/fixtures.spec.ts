@@ -169,6 +169,71 @@ describe('Bộ mẫu Hoàng Hà (RSS chuyên mục)', () => {
   });
 });
 
+/**
+ * Di Động Việt (WordPress, theme tagDiv). robots.txt cấm /dchannel/feed/ và /wp-json/, nên đọc trang HTML.
+ * Tiêu đề trong h3 bị cắt "...", tiêu đề đầy đủ nằm ở thuộc tính title của link ảnh (titleAttr).
+ * Ngày trên trang danh sách là ngày sửa bài, nên không dùng dateSelector mà lấy datePublished ở trang chi tiết.
+ */
+const DDV: ExtractConfig = {
+  itemSelector: '.td_module_1',
+  titleSelector: 'a.td-image-wrap',
+  titleAttr: 'title',
+  imageAttrs: ['data-lazy-src', 'src'],
+  articleUrlPattern: '^/dchannel/[a-z0-9-]+/?$',
+  fetchDetail: true,
+  maxDetailPerRun: 20,
+  detailDelayMs: 3000,
+};
+
+describe('Bộ mẫu Di Động Việt', () => {
+  const items = GenericHtmlEngine.extractConfigured(
+    fixture('didongviet-list-khuyen-mai.html'),
+    'https://didongviet.vn/dchannel/khuyen-mai/',
+    DDV,
+    FIXTURE_TIME,
+  );
+
+  it('lấy đủ 18 bài khuyến mãi với tiêu đề đầy đủ, không bị cắt', () => {
+    expect(items).toHaveLength(18);
+    for (const item of items) {
+      expect(item.url).toMatch(
+        /^https:\/\/didongviet\.vn\/dchannel\/[a-z0-9-]+\/$/,
+      );
+      expect(item.title.length).toBeGreaterThan(20);
+      expect(item.title).not.toMatch(/\.\.\.$|…$/);
+    }
+    expect(items.map((i) => i.title)).toContain(
+      'Ưu đãi thẻ tín dụng Home Credit tại Di Động Việt: Giảm ngay 400.000 đồng khi mua trả góp thiết bị công nghệ',
+    );
+  });
+
+  it('ảnh lấy từ data-lazy-src, không lấy ảnh giữ chỗ data:', () => {
+    for (const item of items)
+      expect(item.image).toMatch(
+        /^https:\/\/didongviet\.vn\/dchannel\/wp-content\/uploads\//,
+      );
+  });
+
+  it('không lấy ngày ở trang danh sách (là ngày sửa bài)', () => {
+    for (const item of items) expect(item.eventDate).toBeNull();
+  });
+
+  it('trang chi tiết cho ngày đăng thật kèm giờ, khác ngày sửa', () => {
+    const d = ArticleDetailHelper.parse(
+      fixture('didongviet-article.html'),
+      'https://didongviet.vn/dchannel/11-11-ngay-doi-gia-tot-di-dong-viet/',
+    );
+    expect(
+      d.published && DateExtractorHelper.vnParts(d.published.date),
+    ).toEqual({
+      year: 2026,
+      month: 11,
+      day: 6,
+    });
+    expect(d.published?.time).toBe('13:53');
+  });
+});
+
 describe('Cấu hình không khớp', () => {
   it('selector không khớp bài nào thì báo lỗi, không báo thành công', async () => {
     const client = {

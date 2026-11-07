@@ -107,6 +107,7 @@ export class GenericHtmlEngine {
         ? block.find(cfg.titleSelector).first()
         : block.find('h1, h2, h3, h4').first();
       const rawTitle =
+        (cfg.titleAttr && titleNode.attr(cfg.titleAttr)) ||
         titleNode.text() ||
         link.attr('title') ||
         block.find('img').first().attr('alt') ||

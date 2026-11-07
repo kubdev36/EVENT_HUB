@@ -345,11 +345,13 @@ export class CrawlerService implements OnApplicationBootstrap {
 
   /** Lưu ảnh thu nhỏ sau lần cào, không chờ và không làm hỏng kết quả cào. Lỗi được ghi log. */
   private storeImagesInBackground(target: CrawlTarget): void {
-    this.imageStore.storeForTarget(target).catch((err: unknown) =>
-      this.logger.warn(
-        `Lưu ảnh cho ${target.id} lỗi: ${err instanceof Error ? err.message : String(err)}`,
-      ),
-    );
+    this.imageStore
+      .storeForTarget(target)
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Lưu ảnh cho ${target.id} lỗi: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
   }
 
   /** Các host nguồn gọi tới; đặt khoảng cách tối thiểu theo cấu hình nguồn (vd. Crawl-delay). */
