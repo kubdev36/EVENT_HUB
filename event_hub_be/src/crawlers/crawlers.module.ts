@@ -18,6 +18,10 @@ import { GenericHtmlEngine } from './engine/generic-html.engine.js';
 import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
 import { ImagesModule } from '../images/images.module.js';
 import { ImageStoreService } from '../images/image-store.service.js';
+import { EventNotifierService } from '../notifications/event-notifier.service.js';
+import { CrawlSourceReader } from './sources/crawl-source.reader.js';
+import { CrawlPipeline } from './pipeline/crawl-pipeline.service.js';
+import { EventUpsertService } from './persistence/event-upsert.service.js';
 
 @Module({
   imports: [
@@ -39,6 +43,10 @@ import { ImageStoreService } from '../images/image-store.service.js';
     GenericHtmlEngine,
     GenericMetaAdsEngine,
     ImageStoreService,
+    EventNotifierService,
+    CrawlSourceReader,
+    CrawlPipeline,
+    EventUpsertService,
   ],
   exports: [CrawlerService],
 })

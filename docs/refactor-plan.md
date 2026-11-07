@@ -281,7 +281,7 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 
 ### Bảo mật nhóm "Sau go-live" (08/11/2026)
 
-- **Cookie httpOnly:** đăng nhập đặt cookie `eh_session` (HttpOnly, SameSite=Strict, Secure ở production, 1 ngày); token không còn trong nội dung phản hồi hay `localStorage`. `POST /auth/logout` xóa cookie. `JwtStrategy` đọc cookie trước, header Bearer chỉ giữ cho giai đoạn chuyển đổi. Frontend gửi `withCredentials` và kiểm tra phiên bằng `/auth/me` khi mở app.
+- **Cookie httpOnly:** đăng nhập đặt cookie `eh_session` (HttpOnly, SameSite=Strict, Secure ở production; thời hạn xem mục "Phiên ngắn hạn"); token không còn trong nội dung phản hồi hay `localStorage`. `POST /auth/logout` xóa cookie. `JwtStrategy` chỉ đọc cookie (đã bỏ header Bearer). Frontend gửi `withCredentials` và kiểm tra phiên bằng `/auth/me` khi mở app.
 - **CSRF:** SameSite=Strict, CORS chỉ cho `CORS_ORIGINS` (có `credentials`), và mọi request ghi dữ liệu phải có header `X-Requested-With` (thiếu thì 403). Frontend và backend phải cùng site (cùng domain gốc) để cookie được gửi kèm.
 - **Ảnh:** `/images/:name` bắt đăng nhập; `Cross-Origin-Resource-Policy: same-site`, `Cache-Control: private`.
 - **Token Telegram:** mã hóa AES-256-GCM bằng `SETTINGS_ENC_KEY` (bắt buộc ở production); `GET /settings` chỉ trả `botTokenSet` và 4 ký tự cuối; ô token để trống thì giữ token cũ. Migration `EncryptTelegramToken` mã hóa token đang lưu. Token cũ từng được trả về trình duyệt nên nên tạo token mới qua BotFather.
@@ -289,7 +289,12 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - **gitleaks (07/11/2026, 38 commit):** 11 kết quả. 10 nằm trong `EVENT_HUB_FE/public/img/viettel.htm`, một trang Facebook lưu khi đang đăng nhập, có khóa phiên; đã xóa file ở commit `15a96d9`, phiên phải được đăng xuất trên Facebook, file vẫn còn trong lịch sử git (repo đang công khai). Kết quả còn lại là badge CircleCI mẫu trong README. Đã ghi fingerprint vào `.gitleaksignore`. Chạy lại: `docker run --rm -v "<repo>:/repo:ro" zricethezav/gitleaks:v8.21.2 git /repo --redact`.
 - **Sửa thêm:** lưu cấu hình crawler từ giao diện từng xóa mất `extract`, `api`, `minRequestIntervalMs`, `storeImages` (`normalizeCrawlerTarget` chỉ giữ vài trường); đã sửa và có test.
 - **Phiên ngắn hạn (08/11/2026):** access token 15 phút (cookie `eh_session`); refresh token 7 ngày trong cookie httpOnly riêng `eh_refresh` chỉ gửi tới `/auth`. Bảng `refresh_tokens` chỉ lưu sha256. `POST /auth/refresh` xoay vòng token; token đã dùng bị gửi lại sau 15 giây (khoảng chờ cho hai tab làm mới cùng lúc) thì thu hồi cả phiên. Đăng xuất thu hồi phiên ở server; đổi hoặc đặt lại mật khẩu thu hồi mọi phiên của tài khoản. Không nhận header Bearer nữa. Frontend gặp 401 thì làm mới một lần rồi gửi lại request. Nhật ký chỉ ghi lần làm mới thất bại. Ảnh `/images` có thể lỗi tạm nếu access token vừa hết hạn mà chưa có request API nào làm mới.
-- **Còn lại:** `npm audit` (08/11/2026): sau `npm audit fix` và gỡ `@nestjs/mau` (không dùng), thư viện production của backend và frontend còn 0 lỗ hổng; còn 11 lỗ hổng moderate/low ở backend và 4 ở frontend, đều trong công cụ dev (jest, eslint). Jest giữ ở 30.4.2 vì 30.5 không nạp được `@nestjs/throttler` (vòng lặp require(esm)).
+- **Thư viện:** `npm audit` (08/11/2026): sau `npm audit fix` và gỡ `@nestjs/mau` (không dùng), thư viện production của backend và frontend còn 0 lỗ hổng; còn 11 lỗ hổng moderate/low ở backend và 4 ở frontend, đều trong công cụ dev (jest, eslint). Jest giữ ở 30.4.2 vì 30.5 không nạp được `@nestjs/throttler` (vòng lặp require(esm)).
+
+### Giai đoạn 4: tách CrawlerService (A1, 08/11/2026)
+
+- `CrawlerService` (888 dòng) tách thành: `CrawlerService` chỉ điều phối (chọn nguồn, khóa, ghi `crawler_runs`, lưu ảnh, gọi thông báo); `CrawlSourceReader` đọc cấu hình nguồn và từ khóa; `CrawlPipeline` tải (chọn engine theo dạng URL, giữ quy tắc cũ), lọc, phân loại, ghép bài có sẵn, lấy trang chi tiết; `EventUpsertService` đọc bài có sẵn và ghi theo lô; `EventNotifierService` (module `notifications/`) gửi Telegram.
+- Không đổi hành vi: 95 test crawler cũ pass không cần sửa nội dung, thêm test chọn engine theo URL.
 
 ### Rủi ro
 

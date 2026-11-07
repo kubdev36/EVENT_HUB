@@ -4,6 +4,10 @@ import { Event } from '../../events/entity/event.entity.js';
 import { CrawlTarget, ParsedCrawlItem } from '../crawler.types.js';
 import { CrawlFetchError } from '../engine/crawler-http.client.js';
 import { CrawlerService } from './crawler.service.js';
+import { EventNotifierService } from '../../notifications/event-notifier.service.js';
+import { EventUpsertService } from '../persistence/event-upsert.service.js';
+import { CrawlPipeline } from '../pipeline/crawl-pipeline.service.js';
+import { CrawlSourceReader } from '../sources/crawl-source.reader.js';
 
 type Row = Record<string, unknown>;
 
@@ -104,16 +108,20 @@ function build(opts: {
       }
     }),
   };
-  const service = new CrawlerService(
-    eventRepo as never,
-    runRepo as never,
-    settingRepo as never,
+  const pipeline = new CrawlPipeline(
     new ClassifierService(),
-    telegram as never,
     engine as never,
     { appliesTo: () => false } as never,
     engine as never,
     engine as never,
+    httpClient as never,
+  );
+  const service = new CrawlerService(
+    runRepo as never,
+    new CrawlSourceReader(settingRepo as never),
+    pipeline,
+    new EventUpsertService(eventRepo as never),
+    new EventNotifierService(eventRepo as never, telegram as never),
     httpClient as never,
     lock as never,
     imageStore as never,
@@ -246,7 +254,7 @@ describe('CrawlerService', () => {
     });
 
     it('escape HTML từ nội dung crawl và bỏ link không phải http(s)', () => {
-      const msg = CrawlerService.buildTelegramMessage({
+      const msg = EventNotifierService.buildTelegramMessage({
         ...pending(),
         url: 'javascript:alert(1)',
       } as unknown as Event);
@@ -577,7 +585,7 @@ describe('CrawlerService', () => {
     });
 
     it('ảnh của bài đổi thì xóa trạng thái ảnh đã lưu để lưu lại', () => {
-      const patch = CrawlerService.diffExisting(
+      const patch = EventUpsertService.diffExisting(
         {
           title: 'A',
           type: 'promo',
@@ -658,9 +666,22 @@ describe('CrawlerService', () => {
       [[blocked, blocked], 2, 'blocked'],
       [[blocked, failed], 2, 'failed'],
     ] as const)('%#', (errors, attempts, expected) => {
-      expect(CrawlerService.resolveRunStatus([...errors], attempts)).toBe(
+      expect(CrawlPipeline.resolveRunStatus([...errors], attempts)).toBe(
         expected,
       );
     });
+  });
+});
+
+describe('CrawlPipeline.engineForUrl', () => {
+  it.each([
+    ['https://www.facebook.com/ads/library/?id=1', 'meta-ads'],
+    ['https://hoanghamobile.com/tin-tuc/category/khuyen-mai/feed/', 'rss'],
+    ['https://shop.vn/sitemap.xml', 'rss'],
+    ['https://shop.vn/news.rss', 'rss'],
+    ['https://www.thegioididong.com/tin-tuc/tin-khuyen-mai/31', 'html'],
+    ['https://didongviet.vn/dchannel/khuyen-mai/', 'html'],
+  ])('%s -> %s', (url, kind) => {
+    expect(CrawlPipeline.engineForUrl(url)).toBe(kind);
   });
 });
