@@ -8,6 +8,7 @@ import { CrawlersModule } from './crawlers/crawlers.module.js';
 import { EventsModule } from './events/events.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 import { UsersModule } from './users/users.module.js';
+import { migrations } from './migrations/index.js';
 
 @Module({
   imports: [
@@ -25,9 +26,12 @@ import { UsersModule } from './users/users.module.js';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize:
-          configService.get<string>('DB_SYNC') === 'true' ||
-          configService.get<string>('NODE_ENV') !== 'production',
+        // Schema chỉ đổi bằng migration, không dùng synchronize.
+        synchronize: false,
+        migrations,
+        // Tự chạy migration khi khởi động; đặt DB_MIGRATIONS_RUN=false để tắt.
+        migrationsRun:
+          configService.get<string>('DB_MIGRATIONS_RUN') !== 'false',
       }),
     }),
     AuthModule,

@@ -94,9 +94,14 @@ export class NoiseFilterHelper {
     if (!url) return true;
     const lower = url.toLowerCase();
     const noisePatterns = [
-      'icon',
-      'logo',
-      'avatar',
+      '/icon',
+      'icon.',
+      'icon-',
+      '/logo.',
+      '/logo-',
+      '_logo.',
+      '/avatar',
+      '_avatar',
       'banner_default',
       'placeholder',
       'blank.gif',

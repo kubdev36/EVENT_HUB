@@ -1,4 +1,14 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+/** partial: một số URL lỗi/bị chặn; blocked: mọi URL bị chặn; failed: lỗi khác. */
+export type CrawlerRunStatus =
+  'running' | 'success' | 'partial' | 'blocked' | 'failed';
 
 @Entity('crawler_runs')
 export class CrawlerRun {
@@ -12,7 +22,7 @@ export class CrawlerRun {
   sourceName: string;
 
   @Column({ default: 'running' })
-  status: 'running' | 'success' | 'failed';
+  status: CrawlerRunStatus;
 
   @Column({ type: 'int', default: 0 })
   itemsFound: number;
@@ -22,6 +32,13 @@ export class CrawlerRun {
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
+
+  /** Số HTTP request đã gửi trong lần chạy (đo baseline). */
+  @Column({ type: 'int', default: 0 })
+  requestCount: number;
+
+  @Column({ type: 'int', nullable: true })
+  durationMs: number | null;
 
   @Column({ type: 'timestamp', nullable: true })
   startedAt: Date | null;

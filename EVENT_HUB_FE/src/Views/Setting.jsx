@@ -184,6 +184,12 @@ export default function Setting() {
         enabled: c.enabled,
         interval: c.interval || '6h',
         targetUrls: c.targetUrls || [],
+        // Giữ cấu hình trích xuất/API của nguồn, nếu không lưu từ giao diện sẽ xóa mất.
+        ...(c.type ? { type: c.type } : {}),
+        ...(c.extract ? { extract: c.extract } : {}),
+        ...(c.api ? { api: c.api } : {}),
+        ...(c.ajaxEndpoint ? { ajaxEndpoint: c.ajaxEndpoint } : {}),
+        ...(c.ajaxPayload ? { ajaxPayload: c.ajaxPayload } : {}),
       }));
       await settingsApi.saveCrawlers({ targets: cleanTargets });
       setStatusMessage('Đã lưu cấu hình Crawler thành công.');
@@ -289,14 +295,21 @@ export default function Setting() {
           interval: formData.interval || '6h',
           lastRun: 'Chưa chạy',
           targetUrls: formData.targetUrls?.filter((u) => u.trim() !== '') || [],
+          ...(formData.extract ? { extract: formData.extract } : {}),
+          ...(formData.api ? { api: formData.api } : {}),
           events: [],
         };
         const updated = [...crawlers, newCrawler];
         await handleSaveCrawlersList(updated);
       } else if (modalMode === 'edit-crawler') {
+        const cleanForm = { ...formData };
+        delete cleanForm.advancedError;
         const updatedCrawler = {
-          ...formData,
+          ...cleanForm,
           targetUrls: formData.targetUrls?.filter((u) => u.trim() !== '') || [],
+          // Ghi rõ để xóa trống ô JSON thì cấu hình cũ cũng bị xóa.
+          extract: formData.extract,
+          api: formData.api,
         };
         const updated = crawlers.map((c) => (c.id === selectedItem.id ? { ...c, ...updatedCrawler } : c));
         await handleSaveCrawlersList(updated);

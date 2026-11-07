@@ -1,6 +1,70 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Upload, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
+
+const ADVANCED_KEYS = ['extract', 'api'];
+
+const pickAdvanced = (formData) =>
+  ADVANCED_KEYS.reduce((acc, key) => (formData[key] ? { ...acc, [key]: formData[key] } : acc), {});
+
+/**
+ * Cấu hình trích xuất của nguồn (extract, api) dạng JSON. Để trống nếu web có RSS hoặc
+ * cách nhận dạng chung đã đủ. Xem docs/crawl-survey.md.
+ */
+function AdvancedConfigField({ formData, setFormData }) {
+  const initial = pickAdvanced(formData);
+  const [text, setText] = useState(Object.keys(initial).length ? JSON.stringify(initial, null, 2) : '');
+  const [open, setOpen] = useState(Object.keys(initial).length > 0);
+
+  const handleChange = (value) => {
+    setText(value);
+    const next = { ...formData };
+    ADVANCED_KEYS.forEach((key) => delete next[key]);
+    delete next.advancedError;
+    if (!value.trim()) {
+      setFormData(next);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Phải là một object JSON');
+      const unknown = Object.keys(parsed).filter((k) => !ADVANCED_KEYS.includes(k));
+      if (unknown.length) throw new Error(`Khóa không hỗ trợ: ${unknown.join(', ')}`);
+      setFormData({ ...next, ...parsed });
+    } catch (err) {
+      setFormData({ ...next, ...initial, advancedError: err.message });
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="font-semibold text-slate-700 hover:text-blue-600 cursor-pointer"
+      >
+        {open ? '▾' : '▸'} Cấu hình nâng cao (JSON)
+      </button>
+      {open && (
+        <>
+          <textarea
+            value={text}
+            onChange={(e) => handleChange(e.target.value)}
+            rows={8}
+            spellCheck={false}
+            placeholder={'{\n  "extract": {\n    "itemSelector": ".leftcate ul.newslist > li",\n    "titleSelector": "h3",\n    "dateSelector": ".timepost",\n    "articleUrlPattern": "^/tin-tuc/[a-z0-9-]+-\\\\d+$",\n    "fetchDetail": true\n  }\n}'}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-500 font-mono text-[11px]"
+          />
+          {formData.advancedError ? (
+            <div className="text-rose-600 text-[11px]">JSON không hợp lệ: {formData.advancedError}</div>
+          ) : (
+            <div className="text-slate-400 text-[11px]">Để trống nếu web có RSS hoặc không cần cấu hình riêng.</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function CrawlerModal({
   isOpen,
@@ -120,7 +184,9 @@ export default function CrawlerModal({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-700">Link RSS / Website theo dõi:</label>
+              <label className="font-semibold text-slate-700">
+                Đường dẫn theo dõi (Website, Facebook, TikTok...):
+              </label>
               <button
                 type="button"
                 onClick={handleAddUrlField}
@@ -137,7 +203,7 @@ export default function CrawlerModal({
                     type="text"
                     value={url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="https://..."
+                    placeholder="VD: https://cellphones.com.vn/km, facebook.com/..., @cellphones.official..."
                     className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
                   />
                   {formData.targetUrls?.length > 1 && (
@@ -155,6 +221,8 @@ export default function CrawlerModal({
             </div>
           </div>
 
+          <AdvancedConfigField formData={formData} setFormData={setFormData} />
+
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <button
               onClick={onClose}
@@ -164,7 +232,7 @@ export default function CrawlerModal({
             </button>
             <button
               onClick={onSave}
-              disabled={saving}
+              disabled={saving || Boolean(formData.advancedError)}
               className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-xs disabled:opacity-50"
             >
               {saving ? 'Đang lưu...' : 'Lưu thay đổi'}

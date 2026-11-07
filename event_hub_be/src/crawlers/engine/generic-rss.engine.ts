@@ -1,45 +1,67 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import { ParsedCrawlItem } from '../crawler.types.js';
-import { CrawlerHttpClient } from './crawler-http.client.js';
+import { CrawlerHttpClient, CrawlFetchError } from './crawler-http.client.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
 import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
 
 @Injectable()
 export class GenericRssEngine {
+  private readonly logger = new Logger(GenericRssEngine.name);
+
   constructor(private readonly httpClient: CrawlerHttpClient) {}
 
   async fetchRssOrSitemap(url: string): Promise<ParsedCrawlItem[]> {
-    const resp = await this.httpClient.fetchHtml(url);
-    if (!resp?.html) return [];
+    const resp = await this.httpClient.requirePage(url);
 
     const items: ParsedCrawlItem[] = [];
-    const isXml = resp.html.includes('<rss') || resp.html.includes('<feed') || resp.html.includes('<?xml') || resp.html.includes('<urlset');
-    if (!isXml) return [];
+    const isXml =
+      resp.html.includes('<rss') ||
+      resp.html.includes('<feed') ||
+      resp.html.includes('<?xml') ||
+      resp.html.includes('<urlset');
+    if (!isXml)
+      throw new CrawlFetchError(
+        'failed',
+        url,
+        'Nội dung trả về không phải RSS/Atom/sitemap',
+      );
 
     const $ = cheerio.load(resp.html, { xmlMode: true });
 
     // 1. Standard RSS (<item>)
     $('item').each((_, el) => {
       const itemNode = $(el);
-      const title = NoiseFilterHelper.cleanTitle(itemNode.find('title').text().trim());
-      const link = itemNode.find('link').text().trim() || itemNode.find('guid').text().trim();
-      const descRaw = itemNode.find('description').text().trim() || itemNode.find('encoded').text().trim() || itemNode.html() || '';
+      const title = NoiseFilterHelper.cleanTitle(
+        itemNode.find('title').text().trim(),
+      );
+      const link =
+        itemNode.find('link').text().trim() ||
+        itemNode.find('guid').text().trim();
+      const descRaw =
+        itemNode.find('description').text().trim() ||
+        itemNode.find('encoded').text().trim() ||
+        itemNode.html() ||
+        '';
       const pubDateText = itemNode.find('pubDate, dc\\:date').text().trim();
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
       // Extract image from tags or HTML
-      let image = itemNode.find('enclosure[type*="image"]').attr('url') ||
-                  itemNode.find('enclosure').attr('url') ||
-                  itemNode.find('media\\:content[medium="image"]').attr('url') ||
-                  itemNode.find('media\\:content').attr('url') ||
-                  itemNode.find('media\\:thumbnail').attr('url') || null;
+      let image =
+        itemNode.find('enclosure[type*="image"]').attr('url') ||
+        itemNode.find('enclosure').attr('url') ||
+        itemNode.find('media\\:content[medium="image"]').attr('url') ||
+        itemNode.find('media\\:content').attr('url') ||
+        itemNode.find('media\\:thumbnail').attr('url') ||
+        null;
 
       if (!image && descRaw) {
-        const descMatch = descRaw.match(/<img[^>]+src=["']([^"']+)["']/i) || descRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
+        const descMatch =
+          descRaw.match(/<img[^>]+src=["']([^"']+)["']/i) ||
+          descRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
         if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
@@ -59,19 +81,53 @@ export class GenericRssEngine {
     // 2. Atom Feed (<entry>)
     $('entry').each((_, el) => {
       const entryNode = $(el);
-      const title = NoiseFilterHelper.cleanTitle(entryNode.find('title').text().trim());
-      const link = entryNode.find('link[rel="alternate"]').attr('href') || entryNode.find('link').attr('href') || '';
-      const contentRaw = entryNode.find('content').text() || entryNode.find('summary').text() || entryNode.html() || '';
+      const title = NoiseFilterHelper.cleanTitle(
+        entryNode.find('title').text().trim(),
+      );
+      const link =
+        entryNode.find('link[rel="alternate"]').attr('href') ||
+        entryNode.find('link').attr('href') ||
+        '';
+      const contentRaw =
+        entryNode.find('content').text() ||
+        entryNode.find('summary').text() ||
+        entryNode.html() ||
+        '';
       const published = entryNode.find('published, updated').text().trim();
 
       if (!title || !link || NoiseFilterHelper.isNoiseTitle(title)) return;
 
-      let image = entryNode.find('link[rel="enclosure"]').attr('href') ||
-                  entryNode.find('enclosure').attr('url') ||
-                  entryNode.find('media\\:content').attr('url') || null;
+      let image: string | null = null;
+      entryNode.find('link').each((_, linkEl) => {
+        const rel = $(linkEl).attr('rel');
+        const type = $(linkEl).attr('type') || '';
+        const href = $(linkEl).attr('href');
+        if (
+          href &&
+          (rel === 'enclosure' || type.startsWith('image/')) &&
+          !image
+        ) {
+          image = href;
+        }
+      });
+
+      if (!image) {
+        image =
+          entryNode.find('enclosure').attr('url') ||
+          entryNode.find('media\\:content').attr('url') ||
+          null;
+      }
 
       if (!image && contentRaw) {
-        const descMatch = contentRaw.match(/<img[^>]+src=["']([^"']+)["']/i) || contentRaw.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif)/i);
+        const unescaped = contentRaw
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"');
+        const descMatch =
+          unescaped.match(/<img[^>]+src=["']([^"']+)["']/i) ||
+          unescaped.match(
+            /https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|avif|image)/i,
+          );
         if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
@@ -92,8 +148,13 @@ export class GenericRssEngine {
       $('url').each((_: number, el: AnyNode) => {
         const urlNode = $(el);
         const loc = urlNode.find('loc').text().trim();
-        const title = NoiseFilterHelper.cleanTitle(urlNode.find('news\\:title, title').text().trim());
-        const pubDate = urlNode.find('news\\:publication_date, lastmod').text().trim();
+        const title = NoiseFilterHelper.cleanTitle(
+          urlNode.find('news\\:title, title').text().trim(),
+        );
+        const pubDate = urlNode
+          .find('news\\:publication_date, lastmod')
+          .text()
+          .trim();
 
         if (loc && title && !NoiseFilterHelper.isNoiseTitle(title)) {
           const parsedDate = DateExtractorHelper.parsePublishedDate(pubDate);
@@ -117,7 +178,9 @@ export class GenericRssEngine {
   }
 
   private async enrichMissingImages(items: ParsedCrawlItem[]): Promise<void> {
-    const missing = items.filter((it) => !it.image && it.url && it.url.startsWith('http'));
+    const missing = items.filter(
+      (it) => !it.image && it.url && it.url.startsWith('http'),
+    );
     if (missing.length === 0) return;
 
     // Fetch og:image for missing items in small batches
@@ -139,7 +202,12 @@ export class GenericRssEngine {
                 item.image = UrlNormalizerHelper.resolveUrl(item.url, ogImg);
               }
             }
-          } catch {}
+          } catch (err) {
+            // Thiếu ảnh không làm hỏng item; chỉ ghi log.
+            this.logger.debug(
+              `Không lấy được ảnh cho ${item.url}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }),
       );
     }
