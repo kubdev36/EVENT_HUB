@@ -38,6 +38,14 @@ export const authApi = {
   me: () => api.get('/auth/me'),
 };
 
+/** API dashboard mới: số liệu tính sẵn bằng SQL (Tổng quan, Báo cáo). */
+export const dashboardApi = {
+  summary: (params) => api.get('/dashboard/summary', { params }),
+  timeseries: (params) => api.get('/dashboard/timeseries', { params }),
+  breakdown: (params) => api.get('/dashboard/breakdown', { params }),
+  events: (params) => api.get('/dashboard/events', { params }),
+};
+
 export const eventsApi = {
   list: (limit = 50) => api.get('/events', { params: { limit } }),
   latest: (limit = 20) => api.get('/events/latest', { params: { limit } }),
