@@ -22,11 +22,11 @@ export default function Login({ onLogin }) {
 
       const data = response.data;
 
-      localStorage.setItem('accessToken', data.accessToken);
+      // Token nằm trong cookie httpOnly; chỉ lưu thông tin hiển thị (email, vai trò).
       localStorage.setItem('user', JSON.stringify(data.user));
       localStorage.setItem('event-hub-auth', 'true');
 
-      onLogin?.(data.user, data.accessToken);
+      onLogin?.(data.user);
     } catch (err) {
       const responseMessage = err.response?.data?.message;
       const errorMessage = Array.isArray(responseMessage)

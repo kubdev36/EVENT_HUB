@@ -1,3 +1,5 @@
+import { loadEncryptionKey } from '../common/secret-box.js';
+
 /**
  * Kiểm tra biến môi trường lúc khởi động. Thiếu biến bắt buộc thì app không chạy,
  * thay vì chạy với giá trị mặc định không an toàn. Không in giá trị secret ra log.
@@ -38,6 +40,18 @@ export function validateEnv(
         errors.push(`${key} đang dùng giá trị mặc định, phải đổi ở production`);
     }
     if (!str('CORS_ORIGINS')) errors.push('Thiếu CORS_ORIGINS ở production');
+    if (!str('SETTINGS_ENC_KEY'))
+      errors.push(
+        'Thiếu SETTINGS_ENC_KEY ở production (khóa mã hóa token Telegram)',
+      );
+  }
+
+  if (str('SETTINGS_ENC_KEY')) {
+    try {
+      loadEncryptionKey(str('SETTINGS_ENC_KEY'));
+    } catch (err) {
+      errors.push((err as Error).message);
+    }
   }
 
   if (errors.length) {

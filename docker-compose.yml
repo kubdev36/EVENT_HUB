@@ -43,6 +43,8 @@ services:
       INIT_ADMIN_EMAIL: ${INIT_ADMIN_EMAIL:-}
       INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SETTINGS_ENC_KEY: ${SETTINGS_ENC_KEY:-}
+      IMAGE_STORE_DIR: ${IMAGE_STORE_DIR:-}
       telegram_bot_token: ${TELEGRAM_BOT_TOKEN:-}
       telegram_chat_id: ${TELEGRAM_CHAT_ID:-}
     ports:

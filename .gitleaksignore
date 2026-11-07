@@ -1,0 +1,17 @@
+# Kết quả gitleaks đã xem xét. Mỗi dòng là fingerprint của một kết quả trong lịch sử git.
+
+# Badge CircleCI mẫu trong README của NestJS, không phải secret.
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:event_hub_be/README.md:generic-api-key:5
+
+# Trang Facebook lưu từ trình duyệt (EVENT_HUB_FE/public/img/viettel.htm), đã xóa ở commit 15a96d9.
+# Phiên đăng nhập trong file phải được đăng xuất trên Facebook; file vẫn còn trong lịch sử git.
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:11
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:49
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:63
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:72
+27f55c43e1b1c8f10120e80aa6efb7f589c5eb0d:EVENT_HUB_FE/public/img/viettel.htm:generic-api-key:90

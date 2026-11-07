@@ -2,9 +2,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class TelegramConfigDto {
-  @ApiProperty({ example: '123456:ABC-DEF...' })
+  @ApiProperty({
+    example: '123456:ABC-DEF...',
+    required: false,
+    description: 'Để trống để giữ token đã lưu',
+  })
+  @IsOptional()
   @IsString()
-  botToken: string;
+  botToken?: string;
 
   @ApiProperty({ example: '-1001234567890' })
   @IsString()

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Users, Send, Sliders, Building2, X } from 'lucide-react';
+import { Bot, Users, Send, Sliders, Building2, ScrollText, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi, settingsApi, toCrawlerList, usersApi } from '../API/API';
 
@@ -17,6 +17,7 @@ import UsersTab from './Settings/tabs/UsersTab';
 import TelegramTab from './Settings/tabs/TelegramTab';
 import KeywordsTab from './Settings/tabs/KeywordsTab';
 import DepartmentsTab from './Settings/tabs/DepartmentsTab';
+import AuditTab from './Settings/tabs/AuditTab';
 
 // Modals
 import CrawlPreviewModal from './Settings/modals/CrawlPreviewModal';
@@ -27,6 +28,13 @@ import KeywordModal from './Settings/modals/KeywordModal';
 import ConfirmDeleteModal from './Settings/modals/ConfirmDeleteModal';
 
 const EMPTY_TELEGRAM_CONFIG = { botToken: '', chatId: '', notifyImmediately: false, includeImage: false };
+/** Chỉ gửi các trường backend nhận; botToken trống nghĩa là giữ token đã lưu. */
+const telegramPayload = (c) => ({
+  botToken: c.botToken || '',
+  chatId: c.chatId || '',
+  notifyImmediately: Boolean(c.notifyImmediately),
+  includeImage: Boolean(c.includeImage),
+});
 
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
@@ -199,7 +207,9 @@ export default function Setting() {
   const handleSaveTelegramConfig = async () => {
     setSettingsSaving(true);
     try {
-      await settingsApi.saveTelegram(telegramConfig);
+      const res = await settingsApi.saveTelegram(telegramPayload(telegramConfig));
+      // Server trả cấu hình đã che token; xóa token vừa nhập khỏi bộ nhớ giao diện.
+      setTelegramConfig({ ...EMPTY_TELEGRAM_CONFIG, ...res.data?.value });
       setStatusMessage('Đã lưu cấu hình Telegram thành công.');
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Lưu cấu hình Telegram thất bại.');
@@ -211,7 +221,7 @@ export default function Setting() {
   const handleTestTelegramConfig = async () => {
     setSettingsSaving(true);
     try {
-      await settingsApi.testTelegram(telegramConfig);
+      await settingsApi.testTelegram(telegramPayload(telegramConfig));
       setStatusMessage('Đã gửi tin nhắn thử nghiệm Telegram.');
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Kiểm tra Telegram thất bại.');
@@ -403,6 +413,7 @@ export default function Setting() {
             { id: 'telegram', label: 'Thông báo Telegram', icon: Send },
             { id: 'keywords', label: 'Từ khóa phân loại', icon: Sliders },
             { id: 'departments', label: 'Phòng ban', icon: Building2 },
+            { id: 'audit', label: 'Nhật ký', icon: ScrollText },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -486,6 +497,8 @@ export default function Setting() {
             onSaveDepartmentRules={handleSaveDepartmentRules}
           />
         )}
+
+        {activeTab === 'audit' && <AuditTab />}
       </div>
 
       {/* Popups & Modals */}

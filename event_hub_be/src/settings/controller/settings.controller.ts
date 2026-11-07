@@ -1,5 +1,11 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import { Role } from '../../auth/enums/role.enum.js';
@@ -44,7 +50,11 @@ export class SettingsController {
             properties: {
               id: { type: 'string', example: 'cellphones' },
               name: { type: 'string', example: 'CellphoneS' },
-              type: { type: 'string', enum: ['web', 'facebook'], example: 'web' },
+              type: {
+                type: 'string',
+                enum: ['web', 'facebook'],
+                example: 'web',
+              },
               logo: { type: 'string', example: '/img/mtm.jpg' },
               enabled: { type: 'boolean', example: true },
               interval: { type: 'string', example: '6h' },
@@ -71,7 +81,9 @@ export class SettingsController {
               type: 'web',
               enabled: true,
               interval: '6h',
-              targetUrls: ['https://hoanghamobile.com/tin-tuc/category/khuyen-mai/'],
+              targetUrls: [
+                'https://hoanghamobile.com/tin-tuc/category/khuyen-mai/',
+              ],
             },
             {
               id: 'fb-cellphones',
@@ -106,7 +118,7 @@ export class SettingsController {
     },
   })
   async updateTelegram(@Body() data: TelegramConfigDto) {
-    return this.settingsService.saveSetting('telegram_config', data);
+    return this.settingsService.saveTelegramConfig(data);
   }
 
   @Post('telegram/test')

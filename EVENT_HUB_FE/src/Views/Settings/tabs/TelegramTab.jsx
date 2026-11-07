@@ -14,10 +14,15 @@ export default function TelegramTab({
         <div className="space-y-1">
           <label className="font-semibold text-slate-700">Bot Token:</label>
           <input
-            type="text"
+            type="password"
+            autoComplete="off"
             value={telegramConfig.botToken || ''}
             onChange={(e) => setTelegramConfig({ ...telegramConfig, botToken: e.target.value })}
-            placeholder="123456:ABC-DEF..."
+            placeholder={
+              telegramConfig.botTokenSet
+                ? `Đã lưu (${telegramConfig.botTokenMasked || '••••'}). Để trống để giữ token cũ`
+                : '123456:ABC-DEF...'
+            }
             className="w-full h-8.5 rounded-lg border border-slate-200 px-3 font-mono text-[11px] sm:text-xs outline-none focus:border-blue-500"
           />
         </div>

@@ -184,9 +184,9 @@ Chưa nên đưa hệ thống ra internet trước khi xong nhóm "Trước go-l
 | `getAllowedTypes` cho xem hết khi thiếu user | Mặc định từ chối, viết test phân quyền cho từng vai trò | Trước go-live |
 | URL nguồn crawl có thể trỏ vào mạng nội bộ (SSRF) | Chỉ cho `http(s)`, chặn IP nội bộ và metadata, kiểm tra lại sau mỗi redirect | Trước go-live |
 | Nội dung crawl không đáng tin, `url` của event chỉ kiểm tra là chuỗi | Chỉ nhận link `http(s)`, escape HTML khi gửi Telegram, rà các chỗ frontend render nội dung này | Trước go-live |
-| JWT lưu trong `localStorage` | Access token ngắn hạn, refresh token trong cookie httpOnly, có thu hồi và chống CSRF | Sau go-live |
-| Bot token Telegram lưu dạng rõ trong DB | Mã hóa khi lưu, che khi trả về frontend | Sau go-live |
-| Không có audit log | Ghi lại đăng nhập, quản lý user, đổi settings | Sau go-live |
+| JWT lưu trong `localStorage` | Cookie httpOnly + chống CSRF (đã làm 08/11/2026); còn lại: access token ngắn hạn, refresh token, thu hồi phiên | Sau go-live |
+| Bot token Telegram lưu dạng rõ trong DB | Mã hóa khi lưu, che khi trả về frontend (đã làm 08/11/2026) | Sau go-live |
+| Không có audit log | Ghi lại đăng nhập, quản lý user, đổi settings (đã làm 08/11/2026) | Sau go-live |
 
 Các việc kiểm tra thêm:
 
@@ -277,6 +277,17 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Nguồn `facebook` mặc định không lưu ảnh (`skipped`) đến khi xem xong điều khoản của Meta; cấu hình nguồn `storeImages` ghi đè mặc định.
 - `GET /images/:name` không cần đăng nhập (thẻ `<img>` không gửi token; tên file khó đoán, ảnh vốn công khai). Chuyển sang bắt đăng nhập khi có cookie httpOnly. API `/dashboard/events` trả thêm `imageLocal`; frontend ưu tiên ảnh đã lưu, không có thì dùng link gốc.
 - Migration `AddEventImageStore` thêm 3 cột; đã thử trên DB tạm (chạy, so schema với entity, hoàn tác, chạy lại).
+
+### Bảo mật nhóm "Sau go-live" (08/11/2026)
+
+- **Cookie httpOnly:** đăng nhập đặt cookie `eh_session` (HttpOnly, SameSite=Strict, Secure ở production, 1 ngày); token không còn trong nội dung phản hồi hay `localStorage`. `POST /auth/logout` xóa cookie. `JwtStrategy` đọc cookie trước, header Bearer chỉ giữ cho giai đoạn chuyển đổi. Frontend gửi `withCredentials` và kiểm tra phiên bằng `/auth/me` khi mở app.
+- **CSRF:** SameSite=Strict, CORS chỉ cho `CORS_ORIGINS` (có `credentials`), và mọi request ghi dữ liệu phải có header `X-Requested-With` (thiếu thì 403). Frontend và backend phải cùng site (cùng domain gốc) để cookie được gửi kèm.
+- **Ảnh:** `/images/:name` bắt đăng nhập; `Cross-Origin-Resource-Policy: same-site`, `Cache-Control: private`.
+- **Token Telegram:** mã hóa AES-256-GCM bằng `SETTINGS_ENC_KEY` (bắt buộc ở production); `GET /settings` chỉ trả `botTokenSet` và 4 ký tự cuối; ô token để trống thì giữ token cũ. Migration `EncryptTelegramToken` mã hóa token đang lưu. Token cũ từng được trả về trình duyệt nên nên tạo token mới qua BotFather.
+- **Nhật ký:** bảng `audit_logs`, interceptor ghi mọi request ghi dữ liệu và đăng nhập (thành công và thất bại): người thao tác, hành động, id đối tượng, tên trường (không có giá trị), IP, kết quả. `GET /audit-logs` (admin), tab "Nhật ký" trong Cài đặt. Request bị chặn trước khi vào controller (CSRF 403, throttle 429, 401 của guard) chưa được ghi.
+- **gitleaks (07/11/2026, 38 commit):** 11 kết quả. 10 nằm trong `EVENT_HUB_FE/public/img/viettel.htm`, một trang Facebook lưu khi đang đăng nhập, có khóa phiên; đã xóa file ở commit `15a96d9`, phiên phải được đăng xuất trên Facebook, file vẫn còn trong lịch sử git (repo đang công khai). Kết quả còn lại là badge CircleCI mẫu trong README. Đã ghi fingerprint vào `.gitleaksignore`. Chạy lại: `docker run --rm -v "<repo>:/repo:ro" zricethezav/gitleaks:v8.21.2 git /repo --redact`.
+- **Sửa thêm:** lưu cấu hình crawler từ giao diện từng xóa mất `extract`, `api`, `minRequestIntervalMs`, `storeImages` (`normalizeCrawlerTarget` chỉ giữ vài trường); đã sửa và có test.
+- **Còn lại:** access token ngắn hạn + refresh token + thu hồi phiên; bỏ hẳn header Bearer; `npm audit` báo 28 lỗ hổng trong thư viện (chưa xem xét).
 
 ### Rủi ro
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import Layout from './Layout/Layout';
 import Login from './Views/Login';
+import { authApi, clearStoredAuth } from './API/API';
 
 const Daily = lazy(() => import('./Views/Daily'));
 const Month = lazy(() => import('./Views/Month'));
@@ -14,7 +15,6 @@ const Setting = lazy(() => import('./Views/Setting'));
 import { normalizeDepartment } from './utils/helpers';
 
 const AUTH_KEY = 'event-hub-auth';
-const TOKEN_KEY = 'accessToken';
 const USER_KEY = 'user';
 const VIEW_KEY = 'event-hub-view';
 const VIEW_PATHS = {
@@ -56,7 +56,9 @@ function canAccessView(user, view) {
 }
 
 function getInitialAuth() {
-  return localStorage.getItem(AUTH_KEY) === 'true' && !!localStorage.getItem(TOKEN_KEY);
+  // Token cũ trong localStorage (trước khi chuyển sang cookie httpOnly) không dùng nữa: xóa đi.
+  localStorage.removeItem('accessToken');
+  return localStorage.getItem(AUTH_KEY) === 'true';
 }
 
 function getInitialUser() {
@@ -92,6 +94,28 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  // Kiểm tra cookie phiên còn hợp lệ khi mở app; hết hạn hoặc chưa có thì về trang đăng nhập.
+  useEffect(() => {
+    if (!isAuthed) return;
+    let active = true;
+    authApi
+      .me()
+      .then((res) => {
+        if (!active || !res.data?.user) return;
+        localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
+        setUser(res.data.user);
+      })
+      .catch((err) => {
+        if (!active || err.response?.status !== 401) return;
+        clearStoredAuth();
+        setIsAuthed(false);
+        setUser(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAuthed]);
+
   useEffect(() => {
     if (!isAuthed && window.location.pathname !== '/') {
       window.history.replaceState({}, '', '/');
@@ -126,9 +150,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    // Xóa cookie phiên ở backend; lỗi mạng vẫn đăng xuất phía giao diện.
+    authApi.logout().catch((err) => console.warn('Đăng xuất phía server lỗi:', err));
+    clearStoredAuth();
     setIsAuthed(false);
     setUser(null);
     setCurrentView('overview');

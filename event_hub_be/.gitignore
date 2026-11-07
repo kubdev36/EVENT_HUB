@@ -62,3 +62,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Ảnh thu nhỏ lưu về máy chủ
 /storage
+/.tmp-dist

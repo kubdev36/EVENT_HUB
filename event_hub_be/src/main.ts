@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { requireCsrfHeader } from './auth/session-cookie.js';
 import { AppModule } from './app.module.js';
 import { parseCorsOrigins } from './config/env.validation.js';
 
@@ -30,7 +32,13 @@ async function bootstrap() {
 
   // CSP mặc định của helmet chặn script inline của Swagger UI, nên chỉ tắt CSP khi có /docs (dev).
   app.use(helmet({ contentSecurityPolicy: isProduction ? undefined : false }));
-  app.enableCors({ origin: parseCorsOrigins(process.env.CORS_ORIGINS) });
+  // credentials: trình duyệt gửi kèm cookie phiên; chỉ cho các origin trong CORS_ORIGINS.
+  app.enableCors({
+    origin: parseCorsOrigins(process.env.CORS_ORIGINS),
+    credentials: true,
+  });
+  app.use(cookieParser());
+  app.use(requireCsrfHeader);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
