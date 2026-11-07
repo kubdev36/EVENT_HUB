@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as http from 'http';
 import * as https from 'https';
+import {
+  assertPublicHttpUrl,
+  HostResolver,
+  UnsafeUrlError,
+} from '../helpers/url-guard.helper.js';
+
+const MAX_REDIRECTS = 5;
 
 export type FetchPageResult =
   | { kind: 'ok'; url: string; html: string }
@@ -30,6 +37,8 @@ const BLOCK_MARKERS = [
 export class CrawlerHttpClient {
   private readonly logger = new Logger(CrawlerHttpClient.name);
   private requests = 0;
+  /** Phân giải DNS; thay được trong test. */
+  resolveHost?: HostResolver;
 
   private readonly userAgents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -80,12 +89,7 @@ export class CrawlerHttpClient {
     for (const attemptUrl of urlsToTry) {
       for (let retry = 0; retry < 2; retry += 1) {
         try {
-          this.requests += 1;
-          const resp = await fetch(attemptUrl, {
-            headers: this.buildHeaders(attemptUrl),
-            redirect: 'follow',
-            signal: AbortSignal.timeout(10000),
-          });
+          const resp = await this.fetchFollowingSafeRedirects(attemptUrl);
 
           if (!resp.ok) {
             await resp.body
@@ -124,6 +128,10 @@ export class CrawlerHttpClient {
           return { kind: 'ok', url: resp.url || attemptUrl, html };
         } catch (err) {
           lastReason = err instanceof Error ? err.message : String(err);
+          if (err instanceof UnsafeUrlError) {
+            this.logger.warn(lastReason);
+            return { kind: 'failed', url, reason: lastReason };
+          }
           if (retry === 1) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
@@ -134,12 +142,49 @@ export class CrawlerHttpClient {
     return { kind: 'failed', url, reason: lastReason };
   }
 
+  /** Kiểm tra URL an toàn (chống SSRF); dùng cho request gửi ngoài client này, vd. GraphQL. */
+  async assertSafeUrl(url: string): Promise<URL> {
+    return assertPublicHttpUrl(url, this.resolveHost);
+  }
+
+  /** fetch tự xử lý chuyển hướng, kiểm tra lại URL an toàn ở mỗi bước. */
+  private async fetchFollowingSafeRedirects(
+    startUrl: string,
+  ): Promise<Response> {
+    let current = startUrl;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+      await assertPublicHttpUrl(current, this.resolveHost);
+      this.requests += 1;
+      const resp = await fetch(current, {
+        headers: this.buildHeaders(current),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+      });
+      const location = resp.headers.get('location');
+      if (resp.status >= 300 && resp.status < 400 && location) {
+        await resp.body?.cancel().catch(() => undefined);
+        current = new URL(location, current).toString();
+        continue;
+      }
+      // Ghi lại URL cuối để engine resolve link tương đối đúng.
+      Object.defineProperty(resp, 'url', { value: current });
+      return resp;
+    }
+    throw new Error(`Quá ${MAX_REDIRECTS} lần chuyển hướng: ${startUrl}`);
+  }
+
   async postAjax(
     url: string,
     body: string,
     referer?: string,
     headers?: Record<string, string>,
   ): Promise<string | null> {
+    try {
+      await assertPublicHttpUrl(url, this.resolveHost);
+    } catch (err) {
+      this.logger.warn((err as Error).message);
+      return null;
+    }
     return new Promise((resolve) => {
       let parsed: URL;
       try {

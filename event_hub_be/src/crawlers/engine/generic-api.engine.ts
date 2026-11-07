@@ -65,6 +65,11 @@ export class GenericApiEngine {
         'Thiếu categoryIds hợp lệ',
       );
     }
+    try {
+      await this.httpClient.assertSafeUrl(SFORUM_GQL);
+    } catch (err) {
+      throw new CrawlFetchError('failed', SFORUM_GQL, (err as Error).message);
+    }
     const maxPages = Math.min(Math.max(api.maxPages ?? 3, 1), 10);
     const gqlHeaders: Record<string, string> = {
       'content-type': 'application/json',
@@ -98,6 +103,8 @@ export class GenericApiEngine {
             method: 'POST',
             headers: gqlHeaders,
             body: JSON.stringify({ query: gqlQuery, variables: {} }),
+            // Không đi theo chuyển hướng: endpoint đã được kiểm tra chống SSRF ở trên.
+            redirect: 'error',
             signal: AbortSignal.timeout(15000),
           });
 

@@ -224,6 +224,19 @@ Làm theo 4 giai đoạn trong khoảng 8 tuần cho một người, mỗi giai 
 
 Chưa làm: đo baseline trên nguồn thật (cần chạy crawl thật).
 
+### Tiến độ bảo mật nhóm "Trước go-live" (07/11/2026)
+
+Đã làm, có test (`src/security.spec.ts`):
+
+- Chỉ admin được chạy crawl; đã xóa `GET /crawlers/run`.
+- Giới hạn đăng nhập: 5 lần / 15 phút mỗi email, 20 lần / 15 phút mỗi IP (`@nestjs/throttler`, lưu trong bộ nhớ process).
+- `getAllowedTypes` mặc định từ chối khi thiếu user hoặc role lạ.
+- Chống SSRF: chỉ `http(s)`, chặn IP nội bộ và metadata, kiểm tra lại sau mỗi chuyển hướng. Chưa chống DNS rebinding.
+- `helmet`; CORS theo `CORS_ORIGINS` (mặc định `localhost:5173`); tắt `/docs` khi `NODE_ENV=production`.
+- Secret trong `docker-compose.yml` chuyển sang `.env` (mẫu ở `.env.example`); Postgres chỉ mở `127.0.0.1`; app không khởi động nếu thiếu secret, và ở production từ chối secret mặc định.
+
+Còn lại: người dùng tự đổi mật khẩu admin `123456`; đặt `JWT_SECRET`, `DB_PASSWORD` mới khi triển khai; quét lịch sử git bằng `gitleaks`; bật trust proxy khi chạy sau reverse proxy.
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

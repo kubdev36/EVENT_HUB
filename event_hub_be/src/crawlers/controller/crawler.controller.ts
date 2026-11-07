@@ -21,15 +21,9 @@ export class CrawlerController {
     return this.crawlerService.getRecentRuns(limit ? Number(limit) : 50);
   }
 
-  @Get('run')
-  @Roles(Role.ADMIN, Role.STAFF)
-  @ApiOperation({ summary: 'Run all enabled crawler targets' })
-  async runAll() {
-    return this.crawlerService.crawlAllTargets();
-  }
-
+  // Chạy crawl gửi request ra ngoài và ghi DB: chỉ admin, chỉ qua POST.
   @Post('run')
-  @Roles(Role.ADMIN, Role.STAFF)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Run all enabled crawler targets (supports async background mode)' })
   @ApiQuery({ name: 'async', required: false, type: Boolean, description: 'Run in background non-blocking' })
   async runAllPost(@Query('async') isAsync?: string) {
@@ -47,7 +41,7 @@ export class CrawlerController {
   }
 
   @Post('run/:id')
-  @Roles(Role.ADMIN, Role.STAFF)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Run one crawler target by id (supports async background mode)' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'async', required: false, type: Boolean, description: 'Run in background non-blocking' })

@@ -9,9 +9,12 @@ import { AuthService } from './service/auth.service.js';
 import { AuthController } from './controller/auth.controller.js';
 import { JwtStrategy } from './jwt.strategy.js';
 import { RolesGuard } from './guards/roles.guard.js'; // 1. Import RolesGuard
+import { ThrottlerModule } from '@nestjs/throttler';
+import { LOGIN_THROTTLERS } from './login-throttle.js';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot({ throttlers: LOGIN_THROTTLERS }),
     TypeOrmModule.forFeature([User]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

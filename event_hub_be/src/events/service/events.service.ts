@@ -30,6 +30,7 @@ export class EventsService {
 
   async findLatest(limit = 50, user?: RequestUser) {
     const allowedTypes = await this.getAllowedTypes(user);
+    if (allowedTypes?.length === 0) return [];
     return this.eventRepository.find({
       where: {
         eventDate: MoreThanOrEqual(new Date('2025-01-01')),
@@ -42,6 +43,7 @@ export class EventsService {
 
   async findAll(user?: RequestUser) {
     const allowedTypes = await this.getAllowedTypes(user);
+    if (allowedTypes?.length === 0) return [];
     return this.eventRepository.find({
       where: {
         eventDate: MoreThanOrEqual(new Date('2025-01-01')),
@@ -255,9 +257,13 @@ export class EventsService {
     };
   }
 
-  private async getAllowedTypes(user?: RequestUser): Promise<string[] | null> {
-    if (!user || user.role === Role.ADMIN) {
+  /** null = xem tất cả (chỉ admin). Thiếu user hoặc role lạ thì từ chối (mảng rỗng). */
+  async getAllowedTypes(user?: RequestUser): Promise<string[] | null> {
+    if (user?.role === Role.ADMIN) {
       return null;
+    }
+    if (!user || user.role !== Role.STAFF) {
+      return [];
     }
 
     const department = this.normalizeDepartment(user.department);
