@@ -6,7 +6,8 @@ export default function CrawlerTab({
   crawlLoading = false,
   onRunAll,
   onAddCrawler,
-  onOpenCrawlPopup,
+  runningId = null,
+  onRunCrawler,
   onEditCrawler,
   onDeleteCrawler,
   onToggleCrawler,
@@ -69,10 +70,12 @@ export default function CrawlerTab({
 
               <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                 <button
-                  onClick={() => onOpenCrawlPopup(c)}
-                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-medium flex items-center gap-1 transition cursor-pointer border border-blue-200"
+                  onClick={() => onRunCrawler?.(c)}
+                  disabled={Boolean(runningId) || crawlLoading}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-medium flex items-center gap-1 transition cursor-pointer border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Play size={11} /> Cào ngay
+                  {runningId === c.id ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+                  {runningId === c.id ? 'Đang cào...' : 'Cào ngay'}
                 </button>
                 <button
                   onClick={() => onEditCrawler(c)}

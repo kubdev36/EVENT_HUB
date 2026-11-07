@@ -11,6 +11,16 @@ function formatLastRun(run) {
   return `${when} · ${RUN_STATUS[run.status] || run.status}`;
 }
 
+const RESULT_LABEL = { ...RUN_STATUS, skipped: 'bỏ qua vì nguồn đang được cào' };
+/** "Di Động Việt: thành công, tìm thấy 18 bài, 3 bài mới." từ kết quả cào một nguồn. */
+function describeCrawl(name, r) {
+  if (!r || typeof r !== 'object') return `Đã cào ${name}.`;
+  const status = RESULT_LABEL[r.status] || r.status || 'xong';
+  const counts = r.status === 'skipped' ? '' : `, tìm thấy ${r.itemsFound ?? 0} bài, ${r.newItems ?? 0} bài mới`;
+  const err = r.errorMessage ? ` (${r.errorMessage})` : '';
+  return `${name}: ${status}${counts}.${err}`;
+}
+
 // Tabs
 import CrawlerTab from './Settings/tabs/CrawlerTab';
 import UsersTab from './Settings/tabs/UsersTab';
@@ -20,7 +30,6 @@ import DepartmentsTab from './Settings/tabs/DepartmentsTab';
 import AuditTab from './Settings/tabs/AuditTab';
 
 // Modals
-import CrawlPreviewModal from './Settings/modals/CrawlPreviewModal';
 import CrawlerModal from './Settings/modals/CrawlerModal';
 import UserModal from './Settings/modals/UserModal';
 import DepartmentModal from './Settings/modals/DepartmentModal';
@@ -52,9 +61,9 @@ export default function Setting() {
   // Status & loading states
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [crawlTarget, setCrawlTarget] = useState(null);
   const [crawlLoading, setCrawlLoading] = useState(false);
-  const [crawlResult, setCrawlResult] = useState(null);
+  /** id nguồn đang được cào bằng nút "Cào ngay" của thẻ. */
+  const [runningId, setRunningId] = useState(null);
 
   // Modal control states
   const [modalMode, setModalMode] = useState(null); // 'add-crawler'|'edit-crawler'|'delete-crawler'|'add-user'|'edit-user'|'delete-user'|'reset-pass'|'edit-keyword'|'add-department'|'edit-department'|'delete-department'
@@ -126,31 +135,19 @@ export default function Setting() {
   };
 
   // Crawl execution
-  const openCrawlPopup = (crawler) => {
-    setCrawlTarget(crawler);
-    setCrawlResult(null);
-  };
-
-  const closeCrawlPopup = () => {
-    setCrawlTarget(null);
-    setCrawlLoading(false);
-    setCrawlResult(null);
-  };
-
-  const runCrawl = async () => {
-    if (!crawlTarget) return;
-    setCrawlLoading(true);
+  // Cào ngay một nguồn, không mở popup; kết quả hiện ở thanh thông báo.
+  const runCrawl = async (crawler) => {
+    if (!crawler || runningId) return;
+    setRunningId(crawler.id);
+    setStatusMessage(`Đang cào ${crawler.name}...`);
     try {
-      const response = await settingsApi.runCrawlerById(crawlTarget.id);
-      const items = Array.isArray(response.data)
-        ? response.data
-        : response.data?.items || response.data?.events || [];
-      setCrawlResult({ items });
-      setStatusMessage(`Đã chạy crawler ${crawlTarget.name}.`);
+      const response = await settingsApi.runCrawlerById(crawler.id);
+      setStatusMessage(describeCrawl(crawler.name, response.data));
+      runs.refetch();
     } catch (err) {
-      setStatusMessage(err.response?.data?.message || 'Chạy crawler thất bại.');
+      setStatusMessage(err.response?.data?.message || `Cào ${crawler.name} thất bại.`);
     } finally {
-      setCrawlLoading(false);
+      setRunningId(null);
     }
   };
 
@@ -451,7 +448,8 @@ export default function Setting() {
             crawlLoading={crawlLoading}
             onRunAll={handleRunAllCrawlers}
             onAddCrawler={() => handleOpenModal('add-crawler')}
-            onOpenCrawlPopup={openCrawlPopup}
+            runningId={runningId}
+            onRunCrawler={runCrawl}
             onEditCrawler={(c) => handleOpenModal('edit-crawler', c)}
             onDeleteCrawler={(c) => handleOpenModal('delete-crawler', c)}
             onToggleCrawler={handleToggleCrawler}
@@ -502,13 +500,6 @@ export default function Setting() {
       </div>
 
       {/* Popups & Modals */}
-      <CrawlPreviewModal
-        crawlTarget={crawlTarget}
-        crawlLoading={crawlLoading}
-        crawlResult={crawlResult}
-        onClose={closeCrawlPopup}
-        onRunCrawl={runCrawl}
-      />
 
       <CrawlerModal
         isOpen={modalMode === 'add-crawler' || modalMode === 'edit-crawler'}
