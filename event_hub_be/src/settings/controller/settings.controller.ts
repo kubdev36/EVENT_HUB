@@ -175,6 +175,16 @@ export class SettingsController {
     return this.settingsService.saveSetting('tracked_products', data);
   }
 
+  @Get('departments')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({
+    summary:
+      'Danh sách phòng ban (mã và tên) cho thanh menu; không kèm cấu hình khác',
+  })
+  async listDepartments() {
+    return this.settingsService.listDepartments();
+  }
+
   @Post('departments')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Save department rules and list' })

@@ -129,6 +129,27 @@ export class SettingsService {
     };
   }
 
+  /** Chỉ mã và tên phòng ban, để mọi người đã đăng nhập dựng menu. */
+  async listDepartments(): Promise<Array<{ code: string; name: string }>> {
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'departments_list' },
+    });
+    const list = Array.isArray(setting?.value) ? setting.value : [];
+    return list.flatMap((item: unknown) => {
+      const d = item as { code?: unknown; name?: unknown };
+      if (typeof d?.code !== 'string' || !d.code.trim()) return [];
+      return [
+        {
+          code: d.code.trim(),
+          name:
+            typeof d.name === 'string' && d.name.trim()
+              ? d.name.trim()
+              : d.code.trim(),
+        },
+      ];
+    });
+  }
+
   async testTelegramMessage(data: unknown) {
     const input = data as TelegramConfig;
     // Ô token để trống: gửi thử bằng token đã lưu.
@@ -187,7 +208,10 @@ export class SettingsService {
       return value.list;
     }
 
-    if (key === 'tracked_products' && this.hasArrayProperty(value, 'products')) {
+    if (
+      key === 'tracked_products' &&
+      this.hasArrayProperty(value, 'products')
+    ) {
       // Bỏ khoảng trắng thừa, bỏ cách viết rỗng hoặc trùng.
       return value.products.map((p) => {
         const item = p as { name: string; aliases: string[] };
