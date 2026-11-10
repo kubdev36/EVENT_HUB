@@ -1,10 +1,16 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import { Role } from '../../auth/enums/role.enum.js';
 import { Roles } from '../../auth/decorators/roles.decorator.js';
-import { CrawlerService } from '../../crawlers/service/crawler.service.js';
+import { CrawlQueueService } from '../../queue/crawl-queue.service.js';
 import { SaveCrawlerSourcesDto } from '../dto/crawler-sources.dto.js';
 import { SaveKeywordRulesDto } from '../dto/keyword-rules.dto.js';
 import { RunCrawlerDto } from '../dto/run-crawler.dto.js';
@@ -18,7 +24,7 @@ import { SettingsService } from '../service/settings.service.js';
 export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
-    private readonly crawlerService: CrawlerService,
+    private readonly queue: CrawlQueueService,
   ) {}
 
   @Get()
@@ -44,8 +50,12 @@ export class SettingsController {
             properties: {
               id: { type: 'string', example: 'cellphones' },
               name: { type: 'string', example: 'CellphoneS' },
-              type: { type: 'string', enum: ['web', 'facebook'], example: 'web' },
-              logo: { type: 'string', example: '/img/mtm.jpg' },
+              type: {
+                type: 'string',
+                enum: ['web', 'facebook'],
+                example: 'web',
+              },
+              logo: { type: 'string', example: '/img/mtm.png' },
               enabled: { type: 'boolean', example: true },
               interval: { type: 'string', example: '6h' },
               targetUrls: {
@@ -60,7 +70,7 @@ export class SettingsController {
               id: 'cellphones',
               name: 'CellphoneS',
               type: 'web',
-              logo: '/img/mtm.jpg',
+              logo: '/img/mtm.png',
               enabled: true,
               interval: '6h',
               targetUrls: ['https://cellphones.com.vn/danh-sach-khuyen-mai'],
@@ -71,7 +81,9 @@ export class SettingsController {
               type: 'web',
               enabled: true,
               interval: '6h',
-              targetUrls: ['https://hoanghamobile.com/tin-tuc/category/khuyen-mai/'],
+              targetUrls: [
+                'https://hoanghamobile.com/tin-tuc/category/khuyen-mai/',
+              ],
             },
             {
               id: 'fb-cellphones',
@@ -106,7 +118,7 @@ export class SettingsController {
     },
   })
   async updateTelegram(@Body() data: TelegramConfigDto) {
-    return this.settingsService.saveSetting('telegram_config', data);
+    return this.settingsService.saveTelegramConfig(data);
   }
 
   @Post('telegram/test')
@@ -184,7 +196,7 @@ export class SettingsController {
   })
   async triggerCrawl(@Body() body: RunCrawlerDto) {
     const target = await this.settingsService.getCrawlerTarget(body.id);
-    return this.crawlerService.crawlSource(target);
+    return { status: 'queued', ...(await this.queue.enqueue([target.id])) };
   }
 
   @Post('crawler/run/:id')
@@ -193,6 +205,7 @@ export class SettingsController {
   @ApiParam({ name: 'id', type: String })
   async triggerCrawlByParam(@Param('id') id: string) {
     const target = await this.settingsService.getCrawlerTarget(id);
-    return this.crawlerService.crawlSource(target);
+    // Chỉ xếp hàng; worker cào và ghi kết quả vào crawler_runs.
+    return { status: 'queued', ...(await this.queue.enqueue([target.id])) };
   }
 }

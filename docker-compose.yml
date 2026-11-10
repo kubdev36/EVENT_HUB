@@ -29,7 +29,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment:
+    environment: &backend-env
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3000
@@ -43,8 +43,13 @@ services:
       INIT_ADMIN_EMAIL: ${INIT_ADMIN_EMAIL:-}
       INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SETTINGS_ENC_KEY: ${SETTINGS_ENC_KEY:-}
+      PASSWORD_PEPPER: ${PASSWORD_PEPPER:-}
+      IMAGE_STORE_DIR: ${IMAGE_STORE_DIR:-}
       telegram_bot_token: ${TELEGRAM_BOT_TOKEN:-}
       telegram_chat_id: ${TELEGRAM_CHAT_ID:-}
+      # API chỉ phục vụ HTTP và đẩy việc crawl vào hàng đợi; service worker cào.
+      PROCESS_ROLE: api
     ports:
       - "3000:3000"
     volumes:
@@ -56,6 +61,27 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  # Worker: chạy lịch, xử lý việc crawl từ hàng đợi pg-boss và gửi thông báo Telegram.
+  worker:
+    build:
+      context: ./event_hub_be
+      dockerfile: Dockerfile
+      target: dev
+    container_name: event_hub_worker
+    restart: unless-stopped
+    command: ["npm", "run", "start:worker:dev"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      PROCESS_ROLE: worker
+      # Migration do backend chạy; worker không chạy để tránh hai tiến trình cùng đổi schema.
+      DB_MIGRATIONS_RUN: "false"
+    volumes:
+      - ./event_hub_be:/app
+      - backend_node_modules:/app/node_modules
 
   frontend:
     build:

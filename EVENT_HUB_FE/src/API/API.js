@@ -1,41 +1,67 @@
 import axios from 'axios';
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
+// Phiên đăng nhập nằm trong cookie httpOnly do backend đặt; trình duyệt tự gửi kèm (withCredentials).
+// X-Requested-With: backend bắt buộc header này với request ghi dữ liệu (chống CSRF).
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
 });
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
+/** Xóa thông tin đăng nhập cũ trong trình duyệt (token cũ từng lưu ở localStorage). */
+export function clearStoredAuth() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('user');
+  localStorage.removeItem('event-hub-auth');
+}
+
+/**
+ * Hết phiên hẳn: xóa thông tin đăng nhập rồi tải lại đúng trang đang xem. App thấy chưa đăng nhập nên hiện
+ * trang đăng nhập; đăng nhập xong quay lại trang đó. Chỉ tải lại khi trước đó đang đăng nhập (không lặp vô hạn).
+ */
+function endSession() {
+  const wasAuthed = localStorage.getItem('event-hub-auth') === 'true';
+  clearStoredAuth();
+  if (wasAuthed) window.location.reload();
+}
+
+// Access token sống 15 phút. Gặp 401 thì làm mới bằng refresh token (cookie httpOnly) rồi gửi lại
+// request một lần. Nhiều request cùng 401 dùng chung một lần làm mới.
+let refreshing = null;
+const AUTH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout'];
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('event-hub-auth');
-      window.location.href = '/';
+  async (error) => {
+    const original = error.config;
+    const isAuthCall = AUTH_PATHS.some((p) => original?.url?.endsWith(p));
+    if (error.response?.status !== 401 || !original || isAuthCall || original._retried) {
+      if (error.response?.status === 401 && original?._retried) endSession();
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+    original._retried = true;
+    refreshing ??= api.post('/auth/refresh').finally(() => {
+      refreshing = null;
+    });
+    try {
+      await refreshing;
+    } catch (refreshError) {
+      // Tab khác có thể vừa làm mới (token cũ không dùng lại được): cookie mới đã có, thử lại một lần.
+      if (refreshError.response?.status !== 401) return Promise.reject(error);
+    }
+    return api(original);
   },
 );
 
 export const authApi = {
   login: (payload) => api.post('/auth/login', payload),
   me: () => api.get('/auth/me'),
+  logout: () => api.post('/auth/logout'),
 };
 
 /** API dashboard mới: số liệu tính sẵn bằng SQL (Tổng quan, Báo cáo). */
@@ -51,13 +77,19 @@ export const eventsApi = {
   create: (payload) => api.post('/events', payload),
 };
 
+/** crawler_sources trong DB có thể là mảng hoặc { targets } / { sources }; luôn trả mảng. */
+export function toCrawlerList(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.targets)) return value.targets;
+  if (Array.isArray(value?.sources)) return value.sources;
+  return [];
+}
+
 export const settingsApi = {
   getAll: () => api.get('/settings'),
   getCrawlerSources: () =>
     api.get('/settings').then((response) => {
-      const value = response.data?.crawler_sources;
-      const sources = Array.isArray(value) ? value : value?.sources || value?.targets || [];
-      return { ...response, data: sources };
+      return { ...response, data: toCrawlerList(response.data?.crawler_sources) };
     }),
   saveCrawlers: (payload) => api.post('/settings/crawlers', payload),
   saveTelegram: (payload) => api.post('/settings/telegram', payload),
@@ -67,6 +99,11 @@ export const settingsApi = {
   runCrawler: (payload) => api.post('/settings/crawler/run', payload),
   runCrawlerById: (id) => api.post(`/settings/crawler/run/${id}`),
   runAllCrawlers: () => api.post('/crawlers/run'),
+};
+
+/** Nhật ký thao tác (chỉ admin). */
+export const auditApi = {
+  list: (params) => api.get('/audit-logs', { params }),
 };
 
 export const usersApi = {

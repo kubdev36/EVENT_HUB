@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRangeEvents } from '../API/useDashboardEvents';
 
@@ -21,7 +21,7 @@ const EVENT_TEXT_COLORS = {
   multiple: 'text-red-600 font-extrabold',
 };
 
-import { useFilterContext } from '../context/FilterContext';
+import { useFilterContext } from '../context/useFilterContext';
 
 export default function Calendar({
   selectedDate,

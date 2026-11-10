@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Home,
   Calendar,
@@ -16,8 +16,13 @@ import {
 } from 'lucide-react';
 import { useSources } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
+import { useQueryClient } from '@tanstack/react-query';
+import { addCrawlerSource } from '../API/crawlerSources';
+import CrawlerModal from '../Views/Settings/modals/CrawlerModal';
+
+const EMPTY_CRAWLER_FORM = { name: '', logo: '', interval: '6h', targetUrls: [''] };
 import { normalizeDepartment } from '../utils/helpers';
-import { useFilterContext } from '../context/FilterContext';
+import { useFilterContext } from '../context/useFilterContext';
 
 const BASE_MENU_TOP = [
   { id: 'overview', label: 'Tổng quan', icon: Home },
@@ -64,6 +69,30 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
   const [departments, setDepartments] = useState([]);
   const userDept = normalizeDepartment(user?.department);
   const isAdmin = user?.role === 'admin';
+  const queryClient = useQueryClient();
+  // Popup "Thêm đối thủ" (cùng popup và cách lưu với Cài đặt > Cấu hình Crawler).
+  const [crawlerForm, setCrawlerForm] = useState(null);
+  const [crawlerSaving, setCrawlerSaving] = useState(false);
+  const [crawlerError, setCrawlerError] = useState('');
+
+  const openAddCrawler = () => {
+    setCrawlerError('');
+    setCrawlerForm(EMPTY_CRAWLER_FORM);
+  };
+  const saveCrawler = async () => {
+    setCrawlerSaving(true);
+    setCrawlerError('');
+    try {
+      await addCrawlerSource(crawlerForm);
+      setCrawlerForm(null);
+      // Cập nhật danh sách đối thủ ở thanh bên và các trang dùng danh sách nguồn.
+      await queryClient.invalidateQueries({ queryKey: ['dash', 'sources'] });
+    } catch (err) {
+      setCrawlerError(err.response?.data?.message || err.message || 'Thêm đối thủ thất bại.');
+    } finally {
+      setCrawlerSaving(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -130,7 +159,7 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
         {/* Header của Sidebar (Cố định chiều cao, không bị cuộn) */}
         <div className="h-16 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <img src="/img/mtm.jpg" alt="Logo" className="w-9 h-9 rounded-lg object-contain border border-slate-100 shadow-2xs" />
+            <img src="/img/mtm.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain border border-slate-100 shadow-2xs" />
             <div>
               <div className="text-[14px] font-bold text-slate-900 leading-tight">Event Hub</div>
               <div className="text-[10px] font-medium text-slate-400 leading-tight">Intelligence Center</div>
@@ -206,25 +235,45 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                   className="flex items-center gap-2.5 px-1 py-1 rounded-md hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700 transition"
                 >
                   <img
-                    src={item.logo || '/img/mtm.jpg'}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    src={item.logo || '/img/mtm.png'}
                     alt={item.name}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = '/img/mtm.jpg';
+                      e.currentTarget.src = '/img/mtm.png';
                     }}
                     className="w-4 h-4 rounded object-contain border border-slate-100 bg-white"
                   />
                   <span className="truncate">{item.name}</span>
                 </div>
               ))}
-              <button className="w-full text-left flex items-center gap-1.5 px-1 py-1.5 text-xs font-semibold text-[#1877f2] hover:text-blue-700 mt-1 cursor-pointer">
-                <Plus size={14} />
-                <span>Thêm đối thủ</span>
-              </button>
+              {/* Chỉ admin được lưu cấu hình nguồn. */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={openAddCrawler}
+                  className="w-full text-left flex items-center gap-1.5 px-1 py-1.5 text-xs font-semibold text-[#1877f2] hover:text-blue-700 mt-1 cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Thêm đối thủ</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
       </aside>
+
+      <CrawlerModal
+        isOpen={Boolean(crawlerForm)}
+        mode="add"
+        formData={crawlerForm ?? EMPTY_CRAWLER_FORM}
+        setFormData={setCrawlerForm}
+        onClose={() => setCrawlerForm(null)}
+        onSave={saveCrawler}
+        saving={crawlerSaving}
+        error={crawlerError}
+      />
     </>
   );
 }

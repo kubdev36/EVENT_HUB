@@ -5,6 +5,7 @@ import { CrawlerRun } from '../crawlers/entity/crawler-run.entity.js';
 import { DateExtractorHelper } from '../crawlers/helpers/date-extractor.helper.js';
 import { Event } from '../events/entity/event.entity.js';
 import { expandEventType } from '../events/event-types.js';
+import { isValidImageName } from '../images/image-storage.js';
 import { EventsService } from '../events/service/events.service.js';
 import { Setting } from '../settings/entity/setting.entity.js';
 import { DashboardFilterDto } from './dto/dashboard-query.dto.js';
@@ -283,7 +284,7 @@ export class DashboardService {
   }
 
   /** Danh sách bài mới nhất trước, phân trang bằng con trỏ (eventDate, id). Không trả rawData. */
-  async list(f: ResolvedFilter, limit = 20, cursor?: string) {
+  async list(f: ResolvedFilter, limit = 20, cursor?: string, search?: string) {
     const qb = this.applyFilter(this.qb(), f)
       .select([
         'e.id',
@@ -292,6 +293,7 @@ export class DashboardService {
         'e.title',
         'e.description',
         'e.image',
+        'e.imageStoredPath',
         'e.url',
         'e.type',
         'e.eventDate',
@@ -301,6 +303,15 @@ export class DashboardService {
       .orderBy('e.eventDate', 'DESC')
       .addOrderBy('e.id', 'DESC')
       .take(limit + 1);
+    const term = search?.trim();
+    if (term) {
+      // Ký tự đặc biệt của LIKE (%, _ và ký tự escape "!") được escape: gõ "50%" tìm đúng chuỗi "50%".
+      const pattern = `%${term.replace(/[!%_]/g, (ch) => `!${ch}`)}%`;
+      qb.andWhere(
+        "(e.title ILIKE :pattern ESCAPE '!' OR e.sourceName ILIKE :pattern ESCAPE '!')",
+        { pattern },
+      );
+    }
     if (cursor) {
       const c = DashboardService.decodeCursor(cursor);
       qb.andWhere(
@@ -319,6 +330,10 @@ export class DashboardService {
         title: e.title,
         description: e.description ? e.description.slice(0, 300) : null,
         image: e.image && /^https?:\/\//i.test(e.image) ? e.image : null,
+        imageLocal:
+          e.imageStoredPath && isValidImageName(e.imageStoredPath)
+            ? `/images/${e.imageStoredPath}`
+            : null,
         url: /^https?:\/\//i.test(e.url) ? e.url : null,
         type: e.type,
         origin: e.origin,

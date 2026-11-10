@@ -77,6 +77,7 @@ export class DashboardController {
       await this.dashboard.resolveFilter(q, req.user),
       q.limit ?? 20,
       q.cursor,
+      q.q,
     );
   }
 }

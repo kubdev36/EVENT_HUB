@@ -59,3 +59,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Ảnh thu nhỏ lưu về máy chủ
+/storage
+/.tmp-dist

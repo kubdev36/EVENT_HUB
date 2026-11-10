@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus } from 'lucide-react';
 import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
@@ -6,7 +6,7 @@ import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
 import { useRangeEvents } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
-import { useFilterContext } from '../context/FilterContext';
+import { useFilterContext } from '../context/useFilterContext';
 import { normalizeDepartment } from '../utils/helpers';
 
 export default function DepartmentView({

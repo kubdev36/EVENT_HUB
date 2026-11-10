@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Upload, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 
@@ -74,6 +74,7 @@ export default function CrawlerModal({
   onClose,
   onSave,
   saving = false,
+  error = '',
 }) {
   if (!isOpen) return null;
 
@@ -126,11 +127,13 @@ export default function CrawlerModal({
               {formData.logo ? (
                 <div className="relative group shrink-0">
                   <img
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
                     src={formData.logo}
                     alt="Logo preview"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = '/img/mtm.jpg';
+                      e.currentTarget.src = '/img/mtm.png';
                     }}
                     className="w-10 h-10 rounded-lg object-contain border border-slate-200 p-1 bg-white shadow-xs"
                   />
@@ -222,6 +225,12 @@ export default function CrawlerModal({
           </div>
 
           <AdvancedConfigField formData={formData} setFormData={setFormData} />
+
+          {error && (
+            <p role="alert" className="text-rose-600 text-[11px] font-medium">
+              {error}
+            </p>
+          )}
 
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <button

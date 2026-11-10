@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Clock, FileEdit, ExternalLink } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
@@ -7,7 +7,7 @@ export default function EventDetail({ data, onClose }) {
 
   if (!data) return null;
 
-  const logoUrl = data?.logo || '/img/mtm.jpg';
+  const logoUrl = data?.logo || '/img/mtm.png';
 
   const getFormattedDate = () => {
     const dateStr = data.events?.[0]?.date;
@@ -46,11 +46,13 @@ export default function EventDetail({ data, onClose }) {
 
           <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-100 flex items-center gap-3">
             <img
+              loading="lazy"
+              referrerPolicy="no-referrer"
               src={logoUrl}
               alt={data.name}
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src = '/img/mtm.jpg';
+                e.currentTarget.src = '/img/mtm.png';
               }}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 shrink-0 shadow-2xs p-0.5 bg-white"
             />
@@ -140,6 +142,7 @@ export default function EventDetail({ data, onClose }) {
                       alt={event.title}
                       className="w-full max-h-48 sm:max-h-56 object-contain rounded-lg transition duration-200 group-hover:scale-[1.01]"
                       loading="lazy"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                 )}
@@ -156,6 +159,7 @@ export default function EventDetail({ data, onClose }) {
                           alt="Thumbnail"
                           className="w-full h-full object-cover"
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                         />
                       </div>
                     ))}

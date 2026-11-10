@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../API/API';
+import { eventImage } from '../API/useDashboardEvents';
 import { Card, Dot, EventThumb, HeatTable, KpiCard, Delta, Segmented, ShareBars, StatusBox, WeeklyBars } from './dashboard/components';
 import {
   addDays,
@@ -126,12 +127,6 @@ export default function Reports() {
           >
             {exporting ? 'Đang xuất...' : 'Xuất CSV'}
           </button>
-          <button type="button" disabled title="Sắp có" className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs text-slate-400 cursor-not-allowed">
-            Xuất Excel · sắp có
-          </button>
-          <button type="button" disabled title="Sắp có" className="rounded-lg px-3 py-1.5 text-xs bg-blue-600/40 text-white cursor-not-allowed">
-            Gửi báo cáo tuần qua Telegram · sắp có
-          </button>
         </div>
       </div>
 
@@ -210,7 +205,7 @@ export default function Reports() {
                     <tr key={e.id} className="border-t border-slate-100">
                       <td className="py-2 px-2">
                         <div className="flex items-center gap-2.5 min-w-60">
-                          <EventThumb src={e.image} />
+                          <EventThumb src={eventImage(e)} />
                           <span className="line-clamp-2">{e.title}</span>
                         </div>
                       </td>

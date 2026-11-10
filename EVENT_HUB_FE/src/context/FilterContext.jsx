@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
-
-const FilterContext = createContext();
+import { useState } from 'react';
+import { FilterContext } from './filterContextObject';
 
 export function FilterProvider({ children }) {
   const [checkedFilters, setCheckedFilters] = useState({
@@ -65,16 +64,4 @@ export function FilterProvider({ children }) {
       {children}
     </FilterContext.Provider>
   );
-}
-
-export function useFilterContext() {
-  const context = useContext(FilterContext);
-  if (!context) {
-    return {
-      checkedFilters: { all: true, mkt: true, sale: true, competitor: true, internal: true },
-      toggleFilter: () => {},
-      isEventVisible: () => true,
-    };
-  }
-  return context;
 }

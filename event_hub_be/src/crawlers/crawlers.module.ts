@@ -16,12 +16,22 @@ import { GenericRssEngine } from './engine/generic-rss.engine.js';
 import { GenericApiEngine } from './engine/generic-api.engine.js';
 import { GenericHtmlEngine } from './engine/generic-html.engine.js';
 import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
+import { ImagesModule } from '../images/images.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+import { CrawlQueueService } from '../queue/crawl-queue.service.js';
+import { ImageStoreService } from '../images/image-store.service.js';
+import { EventNotifierService } from '../notifications/event-notifier.service.js';
+import { CrawlSourceReader } from './sources/crawl-source.reader.js';
+import { CrawlPipeline } from './pipeline/crawl-pipeline.service.js';
+import { EventUpsertService } from './persistence/event-upsert.service.js';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([Event, CrawlerRun, Setting]),
     AuthModule,
+    ImagesModule,
+    NotificationsModule,
   ],
   controllers: [CrawlerController],
   providers: [
@@ -35,7 +45,13 @@ import { GenericMetaAdsEngine } from './engine/generic-meta-ads.engine.js';
     GenericApiEngine,
     GenericHtmlEngine,
     GenericMetaAdsEngine,
+    ImageStoreService,
+    EventNotifierService,
+    CrawlSourceReader,
+    CrawlPipeline,
+    EventUpsertService,
+    CrawlQueueService,
   ],
-  exports: [CrawlerService],
+  exports: [CrawlerService, CrawlQueueService],
 })
 export class CrawlersModule {}

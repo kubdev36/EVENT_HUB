@@ -23,7 +23,7 @@ Chạy trong `event_hub_be` khi có thay đổi backend:
 
 - `npx tsc --noEmit -p tsconfig.build.json`
 - `npm run lint`
-- `npm test`
+- `npm test -- <đường dẫn liên quan>`: chỉ chạy test liên quan tới phần đã sửa (vd. `npm test -- src/notifications`), không chạy toàn bộ. Báo cáo ghi rõ đã chạy những test nào.
 
 Với frontend, chạy các script có trong `EVENT_HUB_FE/package.json`. Sửa lỗi hành vi thì thêm test tái hiện lỗi đó.
 

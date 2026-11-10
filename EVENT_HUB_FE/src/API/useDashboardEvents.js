@@ -1,17 +1,23 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { dashboardApi } from './API';
+import { API_URL, dashboardApi } from './API';
+
+/** Ảnh hiển thị của bài: ưu tiên ảnh thu nhỏ đã lưu trên máy chủ, không có thì dùng link gốc. */
+export function eventImage(e) {
+  if (e?.imageLocal && e.imageLocal.startsWith('/images/')) return `${API_URL}${e.imageLocal}`;
+  return e?.image || '';
+}
 
 /** Logo mặc định theo id/tên nguồn khi cấu hình chưa có logo. */
 export function fallbackLogo(id = '', name = '') {
   const s = `${id} ${name}`.toLowerCase();
-  if (s.includes('minhtuan') || s.includes('minh tuấn') || s.includes('minh tuan')) return '/img/mtm.jpg';
+  if (s.includes('minhtuan') || s.includes('minh tuấn') || s.includes('minh tuan')) return '/img/mtm.png';
   if (s.includes('cellphones')) return '/img/cellphones.png';
   if (s.includes('hoangha') || s.includes('hoàng hà') || s.includes('hoang ha')) return '/img/hoangha.jpg';
   if (s.includes('fpt')) return '/img/fpt.png';
   if (s.includes('tgdd') || s.includes('thegioididong') || s.includes('thế giới di động')) return '/img/tgdd.jpg';
   if (s.includes('nguyenkim') || s.includes('nguyễn kim')) return '/img/nguyenkim.png';
-  return '/img/mtm.jpg';
+  return '/img/mtm.png';
 }
 
 /** Danh sách nguồn (id, tên, logo) — nhẹ, dùng cho thanh menu. */
@@ -51,7 +57,7 @@ const toEvent = (e) => ({
   title: e.title || '',
   fullTitle: e.title || '',
   desc: e.description || '',
-  image: e.image || '',
+  image: eventImage(e),
   url: e.url || '',
   origin: e.origin || 'crawler',
   sourceId: e.sourceId,
@@ -90,9 +96,24 @@ export function useRangeEvents(from, to, { includeOwn = true, enabled = true } =
   return { sources, isLoading: q.isLoading, error: q.error, refetch: q.refetch };
 }
 
-/** Bài có ảnh, mới nhất trước, tải thêm theo trang (thư viện ảnh). */
-export function useImageEvents({ from, to, pageSize = 60 }) {
-  const params = { from, to, includeOwn: 'true', hasImage: 'true', limit: pageSize };
+/**
+ * Bài có ảnh, mới nhất trước, tải thêm theo trang (thư viện ảnh). Mọi bộ lọc chạy ở server:
+ * segment 'all' | 'minhtuan' (nội bộ) | 'competitors'; type: loại bài; q: từ khóa.
+ */
+export function imageQueryParams({ from, to, segment = 'all', type = 'all', q = '', pageSize = 60 }) {
+  return {
+    from,
+    to,
+    hasImage: 'true',
+    limit: pageSize,
+    ...(segment === 'minhtuan' ? { brands: 'minhtuan' } : { includeOwn: segment === 'competitors' ? 'false' : 'true' }),
+    ...(type !== 'all' ? { type } : {}),
+    ...(q.trim() ? { q: q.trim() } : {}),
+  };
+}
+
+export function useImageEvents(options) {
+  const params = imageQueryParams(options);
   return useInfiniteQuery({
     queryKey: ['dash', 'image-events', params],
     queryFn: ({ pageParam }) => dashboardApi.events({ ...params, cursor: pageParam }).then((r) => r.data),

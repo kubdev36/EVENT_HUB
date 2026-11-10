@@ -7,6 +7,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+export type ImageStoreStatus = 'stored' | 'failed' | 'blocked' | 'skipped';
+
 @Entity('events')
 @Index(['sourceId', 'url'], { unique: true })
 @Index(['contentHash'], { unique: true })
@@ -43,6 +45,18 @@ export class Event {
 
   @Column({ type: 'text', nullable: true })
   image: string | null;
+
+  /** Tên file ảnh thu nhỏ đã lưu (`<sha256>.webp`); null khi chưa lưu. Link gốc vẫn ở `image`. */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  imageStoredPath: string | null;
+
+  /** Lần thử lưu ảnh gần nhất. */
+  @Column({ type: 'timestamptz', nullable: true })
+  imageStoredAt: Date | null;
+
+  /** Kết quả lưu ảnh: stored | failed | blocked | skipped; null khi chưa thử. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  imageStoreStatus: ImageStoreStatus | null;
 
   @Column()
   url: string;

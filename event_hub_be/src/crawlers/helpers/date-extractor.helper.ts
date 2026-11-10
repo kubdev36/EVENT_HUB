@@ -136,6 +136,22 @@ export class DateExtractorHelper {
     );
   }
 
+  /**
+   * Ngày đăng từ dữ liệu có cấu trúc (JSON-LD, meta, RSS) rơi đúng 00:00:00 giờ Việt Nam thường là
+   * nguồn chỉ có ngày và tự điền nửa đêm (vd. "2026-11-06T17:00:00+00:00"). Giữ ngày, bỏ giờ.
+   * Bài thật sự đăng đúng 00:00:00 sẽ mất giờ (hiếm); ngày vẫn đúng.
+   */
+  static withoutMidnightTime(parsed: ParsedDate | null): ParsedDate | null {
+    if (!parsed || parsed.time !== '00:00') return parsed;
+    if (
+      parsed.date.getUTCSeconds() !== 0 ||
+      parsed.date.getUTCMilliseconds() !== 0
+    )
+      return parsed;
+    const { year, month, day } = this.vnParts(parsed.date);
+    return this.dateOnly(year, month, day);
+  }
+
   /** Ngày theo lịch Việt Nam, neo 12:00 VN; time = null vì nguồn không cho giờ. */
   static dateOnly(year: number, month: number, day: number): ParsedDate {
     return {

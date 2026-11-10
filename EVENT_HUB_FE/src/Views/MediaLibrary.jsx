@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   ChevronLeft, 
@@ -10,20 +10,35 @@ import {
   Calendar,
   Clock
 } from 'lucide-react';
-import { useImageEvents, useSources } from '../API/useDashboardEvents';
+import { eventImage, useImageEvents, useSources } from '../API/useDashboardEvents';
 import { addDays, vnToday } from './dashboard/shared';
+import DateRangeFilter from './media/DateRangeFilter';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
 export default function MediaLibrary() {
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Từ khóa gửi lên server sau khi ngừng gõ 300 ms (không gọi API mỗi lần gõ phím).
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+  /** Khoảng ngày lọc ở server ({ from, to } theo lịch Việt Nam); null = tất cả (400 ngày gần nhất). */
+  const [dateRange, setDateRange] = useState(null);
   const [activeIndex, setActiveIndex] = useState(null);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const { sources } = useSources();
-  // Ảnh trong 400 ngày gần nhất, mới nhất trước, tải thêm theo trang.
+  // Ảnh trong khoảng ngày đã chọn (mặc định 400 ngày gần nhất), mới nhất trước, tải thêm theo trang.
   const today = vnToday();
-  const images = useImageEvents({ from: addDays(today, -399), to: today });
+  const images = useImageEvents({
+    from: dateRange?.from ?? addDays(today, -399),
+    to: dateRange?.to ?? today,
+    segment: selectedSegment,
+    type: selectedType,
+    q: searchTerm,
+  });
   const imageItems = useMemo(() => (images.data?.pages ?? []).flatMap((p) => p.items), [images.data]);
 
   const allPhotos = useMemo(() => {
@@ -47,35 +62,20 @@ export default function MediaLibrary() {
           id: `${e.sourceId}-${e.id}`,
           title: e.title,
           desc: e.description || '',
-          image: e.image,
+          image: eventImage(e),
           date: e.date,
           time: e.time,
           type: e.type,
           url: e.url,
           brandId: e.sourceId,
           brandName: brand?.name || e.sourceName || e.sourceId,
-          brandLogo: brand?.logo || '/img/mtm.jpg',
+          brandLogo: brand?.logo || '/img/mtm.png',
         };
       });
   }, [imageItems, sources]);
 
-  const filteredPhotos = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return allPhotos.filter((item) => {
-      const matchSegment =
-        selectedSegment === 'all' ||
-        (selectedSegment === 'minhtuan' && item.brandId === 'minhtuan') ||
-        (selectedSegment === 'competitors' && item.brandId !== 'minhtuan');
-
-      const matchType = selectedType === 'all' || item.type === selectedType;
-      const matchSearch =
-        q === '' ||
-        item.title.toLowerCase().includes(q) ||
-        item.brandName.toLowerCase().includes(q);
-
-      return matchSegment && matchType && matchSearch;
-    });
-  }, [allPhotos, selectedSegment, selectedType, searchQuery]);
+  // Nhóm, loại bài và từ khóa đã lọc ở server (useImageEvents).
+  const filteredPhotos = allPhotos;
 
   const groupedPhotos = useMemo(() => {
     const groupsMap = new Map();
@@ -119,7 +119,8 @@ export default function MediaLibrary() {
             <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Kho lưu trữ hình ảnh và banner chiến dịch của toàn bộ hệ thống</p>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <DateRangeFilter value={dateRange} onChange={setDateRange} today={today} />
             <div className="relative flex-1 sm:w-60 sm:flex-initial lg:w-72">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -204,6 +205,7 @@ export default function MediaLibrary() {
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300 ease-out"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
 
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 sm:p-2.5 flex flex-col justify-between">
@@ -253,6 +255,8 @@ export default function MediaLibrary() {
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               {currentPhoto.brandLogo && (
                 <img
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                   src={currentPhoto.brandLogo}
                   alt={currentPhoto.brandName}
                   className="w-6 h-6 object-contain rounded-full bg-white p-0.5 shrink-0"
@@ -294,6 +298,8 @@ export default function MediaLibrary() {
             )}
 
             <img
+              loading="lazy"
+              referrerPolicy="no-referrer"
               src={currentPhoto.image}
               alt={currentPhoto.title}
               className="max-h-[60vh] sm:max-h-[75vh] max-w-full object-contain rounded-lg sm:rounded-xl shadow-2xl transition duration-200"

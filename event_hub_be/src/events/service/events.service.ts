@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { Repository } from 'typeorm';
+import { NotificationOutboxService } from '../../notifications/notification-outbox.service.js';
 import { CreateEventDto } from '../dto/create-event.dto.js';
 import { Event } from '../entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
@@ -27,6 +28,7 @@ export class EventsService {
     private readonly eventRepository: Repository<Event>,
     @InjectRepository(Setting)
     private readonly settingRepository: Repository<Setting>,
+    private readonly outbox: NotificationOutboxService,
   ) {}
 
   async createManualEvent(data: CreateEventDto, user?: RequestUser) {
@@ -68,7 +70,12 @@ export class EventsService {
       notifiedAt: null,
     });
 
-    return this.eventRepository.save(event);
+    // Lưu bài và thông báo chờ gửi trong cùng transaction.
+    return this.eventRepository.manager.transaction(async (m) => {
+      const saved = await m.save(Event, event);
+      await this.outbox.enqueue([saved.id], m);
+      return saved;
+    });
   }
 
   private buildManualContentHash(

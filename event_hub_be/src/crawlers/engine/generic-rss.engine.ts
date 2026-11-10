@@ -65,7 +65,9 @@ export class GenericRssEngine {
         if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
-      const parsedDate = DateExtractorHelper.parsePublishedDate(pubDateText);
+      const parsedDate = DateExtractorHelper.withoutMidnightTime(
+        DateExtractorHelper.parsePublishedDate(pubDateText),
+      );
 
       items.push({
         title,
@@ -131,7 +133,9 @@ export class GenericRssEngine {
         if (descMatch) image = descMatch[1] || descMatch[0];
       }
 
-      const parsedDate = DateExtractorHelper.parsePublishedDate(published);
+      const parsedDate = DateExtractorHelper.withoutMidnightTime(
+        DateExtractorHelper.parsePublishedDate(published),
+      );
       items.push({
         title,
         url: link,
@@ -157,7 +161,9 @@ export class GenericRssEngine {
           .trim();
 
         if (loc && title && !NoiseFilterHelper.isNoiseTitle(title)) {
-          const parsedDate = DateExtractorHelper.parsePublishedDate(pubDate);
+          const parsedDate = DateExtractorHelper.withoutMidnightTime(
+            DateExtractorHelper.parsePublishedDate(pubDate),
+          );
           items.push({
             title,
             url: loc,

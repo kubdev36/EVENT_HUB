@@ -1,5 +1,4 @@
-import React from 'react';
-import { Users, Plus, KeyRound, Edit2, Trash2 } from 'lucide-react';
+import { Plus, KeyRound, Edit2, Trash2 } from 'lucide-react';
 
 export default function UsersTab({
   users = [],

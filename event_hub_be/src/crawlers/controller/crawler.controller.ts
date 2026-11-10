@@ -1,9 +1,17 @@
 import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import { Roles } from '../../auth/decorators/roles.decorator.js';
 import { Role } from '../../auth/enums/role.enum.js';
+import { CrawlQueueService } from '../../queue/crawl-queue.service.js';
+import { CrawlSourceReader } from '../sources/crawl-source.reader.js';
 import { CrawlerService } from '../service/crawler.service.js';
 
 @ApiTags('crawlers')
@@ -11,7 +19,11 @@ import { CrawlerService } from '../service/crawler.service.js';
 @Controller('crawlers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CrawlerController {
-  constructor(private readonly crawlerService: CrawlerService) {}
+  constructor(
+    private readonly crawlerService: CrawlerService,
+    private readonly queue: CrawlQueueService,
+    private readonly sources: CrawlSourceReader,
+  ) {}
 
   @Get('runs')
   @Roles(Role.ADMIN, Role.STAFF)
@@ -22,41 +34,24 @@ export class CrawlerController {
   }
 
   // Chạy crawl gửi request ra ngoài và ghi DB: chỉ admin, chỉ qua POST.
+  // API chỉ đẩy việc vào hàng đợi; worker cào và ghi kết quả vào crawler_runs.
   @Post('run')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Run all enabled crawler targets (supports async background mode)' })
-  @ApiQuery({ name: 'async', required: false, type: Boolean, description: 'Run in background non-blocking' })
-  async runAllPost(@Query('async') isAsync?: string) {
-    if (isAsync === 'true' || isAsync === '1') {
-      void this.crawlerService.crawlAllTargets().catch((err) => {
-        console.error('[Background Crawler] Error running crawler targets:', err);
-      });
-      return {
-        message: 'Crawler background job started successfully.',
-        status: 'running',
-        timestamp: new Date().toISOString(),
-      };
-    }
-    return this.crawlerService.crawlAllTargets();
+  @ApiOperation({ summary: 'Xếp hàng cào mọi nguồn đang bật' })
+  async runAll() {
+    const targets = await this.crawlerService.enabledTargets();
+    return {
+      status: 'queued',
+      ...(await this.queue.enqueue(targets.map((t) => t.id))),
+    };
   }
 
   @Post('run/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Run one crawler target by id (supports async background mode)' })
+  @ApiOperation({ summary: 'Xếp hàng cào một nguồn' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ name: 'async', required: false, type: Boolean, description: 'Run in background non-blocking' })
-  async runOne(@Param('id') id: string, @Query('async') isAsync?: string) {
-    if (isAsync === 'true' || isAsync === '1') {
-      void this.crawlerService.crawlTargetById(id).catch((err) => {
-        console.error(`[Background Crawler] Error running target ${id}:`, err);
-      });
-      return {
-        message: `Crawler target ${id} started in background.`,
-        status: 'running',
-        targetId: id,
-        timestamp: new Date().toISOString(),
-      };
-    }
-    return this.crawlerService.crawlTargetById(id);
+  async runOne(@Param('id') id: string) {
+    const target = await this.sources.getTargetById(id);
+    return { status: 'queued', ...(await this.queue.enqueue([target.id])) };
   }
 }

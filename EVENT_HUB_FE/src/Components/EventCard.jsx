@@ -1,10 +1,9 @@
-import React from 'react';
 import { Clock, ChevronRight } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 export default function EventCard({ data, onOpenDetail }) {
-  const logoUrl = data?.logo || '/img/mtm.jpg';
+  const logoUrl = data?.logo || '/img/mtm.png';
 
   return (
     <div className="flex flex-col md:grid md:grid-cols-[160px_1fr_150px] bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs hover:border-slate-300 transition-all">
@@ -14,11 +13,13 @@ export default function EventCard({ data, onOpenDetail }) {
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <img
+            loading="lazy"
+            referrerPolicy="no-referrer"
             src={logoUrl}
             alt={data.name}
             onError={(e) => {
               e.currentTarget.onerror = null;
-              e.currentTarget.src = '/img/mtm.jpg';
+              e.currentTarget.src = '/img/mtm.png';
             }}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-xs"
           />
@@ -79,7 +80,7 @@ export default function EventCard({ data, onOpenDetail }) {
                 <div className="h-24 sm:h-20 w-full rounded-md overflow-hidden bg-slate-50 border border-slate-100 shrink-0 select-none flex items-center justify-center">
                   {event.image ? (
                     <img
-                      src={getOptimizedImageUrl(event.image, 300)}
+                      src={getOptimizedImageUrl(event.image)}
                       alt={event.title}
                       referrerPolicy="no-referrer"
                       onError={(e) => {
@@ -92,6 +93,8 @@ export default function EventCard({ data, onOpenDetail }) {
                     />
                   ) : (
                     <img
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                       src={logoUrl}
                       alt={data.name}
                       className="w-9 h-9 object-contain opacity-50 p-0.5 bg-white rounded"

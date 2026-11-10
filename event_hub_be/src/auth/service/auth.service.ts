@@ -1,8 +1,12 @@
-import { BadRequestException, Injectable, UnauthorizedException, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import { PasswordHasher } from '../password-hasher.js';
 import { Repository } from 'typeorm';
 import { LoginDto } from '../dto/login.dto.js';
 import { User } from '../../users/entity/user.entity.js';
@@ -13,8 +17,8 @@ export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly jwtService: JwtService,
     private readonly configService: ConfigService, // Inject ConfigService để đọc biến môi trường
+    private readonly hasher: PasswordHasher,
   ) {}
 
   // Tự động khởi tạo tài khoản Admin từ .env nếu bảng users chưa có
@@ -25,10 +29,12 @@ export class AuthService implements OnModuleInit {
     if (!adminEmail || !adminPassword) return;
 
     const email = adminEmail.trim().toLowerCase();
-    const existingAdmin = await this.userRepository.findOne({ where: { email } });
+    const existingAdmin = await this.userRepository.findOne({
+      where: { email },
+    });
 
     if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await this.hasher.hash(adminPassword);
       const admin = this.userRepository.create({
         email,
         password: hashedPassword,
@@ -54,17 +60,20 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException('Account has been disabled.');
     }
 
-    const isMatch = await bcrypt.compare(loginDto.password, user.password);
-    if (!isMatch) {
+    const check = await this.hasher.verify(loginDto.password, user.password);
+    if (!check.ok) {
       throw new UnauthorizedException('Email or password is incorrect.');
     }
+    // Mật khẩu còn băm kiểu cũ (chưa có pepper): băm lại ngay khi biết mật khẩu đúng.
+    if (check.needsUpgrade) {
+      await this.userRepository.update(user.id, {
+        password: await this.hasher.hash(loginDto.password),
+      });
+    }
 
-    const payload = { sub: user.id, email: user.email, role: user.role, department: user.department };
-    const accessToken = await this.jwtService.signAsync(payload);
-
+    // Token do SessionService cấp (access token ngắn hạn + refresh token xoay vòng).
     return {
       message: 'Login successful',
-      accessToken,
       user: {
         id: user.id,
         email: user.email,

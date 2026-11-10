@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { LogOut, Menu } from 'lucide-react';
 import Sidebar from '../Components/Sidebar';
 
@@ -27,7 +27,9 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
             </button>
             <div className="flex items-center gap-2 min-w-0">
               <img
-                src="/img/mtm.jpg"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                src="/img/mtm.png"
                 alt="Logo"
                 className="w-7 h-7 rounded-md object-contain border border-slate-100 shadow-2xs shrink-0"
               />

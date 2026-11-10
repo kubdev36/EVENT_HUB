@@ -5,6 +5,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Repository } from 'typeorm';
 import { User } from '../users/entity/user.entity.js';
+import { tokenFromCookie } from './session-cookie.js';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -14,16 +15,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly userRepository: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Chỉ nhận token trong cookie httpOnly; không nhận header Bearer.
+      jwtFromRequest: ExtractJwt.fromExtractors([tokenFromCookie]),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt_token'),
     });
   }
 
-  async validate(payload: { sub: string; email: string; role: string; department?: string | null }) {
-    const user = await this.userRepository.findOne({ where: { id: payload.sub } });
+  async validate(payload: {
+    sub: string;
+    email: string;
+    role: string;
+    department?: string | null;
+  }) {
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Token is invalid or the account is disabled.');
+      throw new UnauthorizedException(
+        'Token is invalid or the account is disabled.',
+      );
     }
 
     return {

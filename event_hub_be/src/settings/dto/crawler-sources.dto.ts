@@ -30,6 +30,17 @@ export class ExtractConfigDto {
   @MaxLength(300)
   titleSelector?: string;
 
+  @ApiProperty({
+    required: false,
+    example: 'title',
+    description:
+      'Lấy tiêu đề từ thuộc tính này của phần tử titleSelector thay vì chữ bên trong',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-zA-Z][a-zA-Z0-9_:-]{0,63}$/)
+  titleAttr?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -129,7 +140,7 @@ export class CrawlerSourceItemDto {
   @IsIn(['web', 'facebook'])
   type?: 'web' | 'facebook';
 
-  @ApiProperty({ example: '/img/mtm.jpg', required: false })
+  @ApiProperty({ example: '/img/mtm.png', required: false })
   @IsOptional()
   @IsString()
   logo?: string;
@@ -181,6 +192,15 @@ export class CrawlerSourceItemDto {
   @Min(0)
   @Max(60000)
   minRequestIntervalMs?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Lưu ảnh thu nhỏ về máy chủ; mặc định true với web, false với facebook',
+  })
+  @IsOptional()
+  @IsBoolean()
+  storeImages?: boolean;
 }
 
 export class SaveCrawlerSourcesDto {

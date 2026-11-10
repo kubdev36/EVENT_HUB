@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import api from '../API/API.js';
 
@@ -22,11 +22,11 @@ export default function Login({ onLogin }) {
 
       const data = response.data;
 
-      localStorage.setItem('accessToken', data.accessToken);
+      // Token nằm trong cookie httpOnly; chỉ lưu thông tin hiển thị (email, vai trò).
       localStorage.setItem('user', JSON.stringify(data.user));
       localStorage.setItem('event-hub-auth', 'true');
 
-      onLogin?.(data.user, data.accessToken);
+      onLogin?.(data.user);
     } catch (err) {
       const responseMessage = err.response?.data?.message;
       const errorMessage = Array.isArray(responseMessage)
@@ -44,7 +44,7 @@ export default function Login({ onLogin }) {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.04)] p-8 sm:p-10 flex flex-col gap-6">
         <div className="text-center space-y-3">
           <div className="flex justify-center">
-            <img src="/img/mtm.jpg" alt="MTM" className="w-auto h-20 max-w-[220px] object-contain" />
+            <img src="/img/mtm.png" alt="MTM" className="w-auto h-20 max-w-[220px] object-contain" />
           </div>
 
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Đăng nhập hệ thống</h1>
