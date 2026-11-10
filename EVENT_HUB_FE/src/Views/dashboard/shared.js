@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * Màu gắn theo thứ tự nguồn trong cài đặt (ổn định), không theo thứ hạng, để lọc hãng không đổi màu.
  * Aqua và vàng có tương phản thấp trên nền sáng: luôn kèm nhãn chữ, không dùng màu một mình.
  */
-export const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100'];
+export const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#8b5cd6'];
 export const OTHER_COLOR = '#8a8f98';
 
 export function makeBrandColor(sourceIds) {

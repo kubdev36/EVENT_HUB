@@ -138,15 +138,12 @@ export function DailyLineChart({ days, series, nameOf, colorOf, height = 300 }) 
   const tip = useTooltip();
   const [hover, setHover] = useState(null);
   const W = Math.max(width, 280);
-  const m = { l: 30, r: 112, t: 10, b: 24 };
+  const m = { l: 30, r: 16, t: 10, b: 24 };
   const n = days.length;
   const max = Math.max(4, ...series.flatMap((s) => s.values));
   const yMax = Math.ceil(max / 4) * 4;
   const x = (i) => m.l + (i * (W - m.l - m.r)) / Math.max(1, n - 1);
   const y = (v) => m.t + (height - m.t - m.b) * (1 - v / yMax);
-  // Nhãn trực tiếp ở cuối đường, đẩy xuống nếu chồng nhau.
-  const ends = series.map((s) => ({ s, y: y(s.values[n - 1] ?? 0) })).sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i += 1) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
   const step = Math.max(1, Math.ceil(n / 6));
 
   const onMove = (e) => {
@@ -177,7 +174,7 @@ export function DailyLineChart({ days, series, nameOf, colorOf, height = 300 }) 
           })}
           {days.map((d, i) =>
             i % step === 0 || i === n - 1 ? (
-              <text key={d} x={x(i)} y={height - 6} textAnchor="middle" className="fill-slate-400 text-[11px]">
+              <text key={d} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} className="fill-slate-400 text-[11px]">
                 {formatDay(d)}
               </text>
             ) : null,
@@ -193,13 +190,9 @@ export function DailyLineChart({ days, series, nameOf, colorOf, height = 300 }) 
               strokeLinecap="round"
             />
           ))}
-          {ends.map((e) => (
-            <g key={e.s.sourceId}>
-              <circle cx={x(n - 1)} cy={y(e.s.values[n - 1] ?? 0)} r={4} fill={colorOf(e.s.sourceId)} stroke="#fff" strokeWidth={2} />
-              <text x={x(n - 1) + 8} y={e.y + 4} className="fill-slate-600 text-[11px]">
-                {nameOf(e.s.sourceId)}
-              </text>
-            </g>
+          {/* Tên hãng đã có trong chú thích phía trên; chỉ đánh dấu điểm cuối. */}
+          {series.map((s) => (
+            <circle key={s.sourceId} cx={x(n - 1)} cy={y(s.values[n - 1] ?? 0)} r={4} fill={colorOf(s.sourceId)} stroke="#fff" strokeWidth={2} />
           ))}
           {hover != null && <line x1={x(hover)} x2={x(hover)} y1={m.t} y2={height - m.b} stroke="#7c7b76" strokeDasharray="3 3" />}
           <rect

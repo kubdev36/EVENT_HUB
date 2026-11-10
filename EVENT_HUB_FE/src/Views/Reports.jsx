@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import { dashboardApi } from '../API/API';
 import { eventImage } from '../API/useDashboardEvents';
 import { Card, Dot, EventThumb, HeatTable, KpiCard, Delta, Segmented, ShareBars, StatusBox, WeeklyBars } from './dashboard/components';
@@ -35,6 +36,15 @@ const WEEKS = 12;
 const CSV_MAX_ROWS = 2000;
 const get = (fn, params) => fn(params).then((r) => r.data);
 
+/** Tên sản phẩm bấm được: mở Thư viện ảnh, tìm sẵn theo tên sản phẩm. */
+function ProductLink({ name }) {
+  return (
+    <Link to={`/media-library?q=${encodeURIComponent(name)}`} className="hover:text-blue-600 hover:underline" title={`Xem bài có ảnh nhắc tới ${name}`}>
+      {name}
+    </Link>
+  );
+}
+
 export default function Reports() {
   const [filters, setFilters] = useUrlState({ period: 'week' });
   const [exporting, setExporting] = useState(false);
@@ -53,6 +63,9 @@ export default function Reports() {
     queryKey: ['dash', 'breakdown', 'week', weeksFrom, today],
     queryFn: () => get(dashboardApi.breakdown, { from: weeksFrom, to: today, type: 'promo', by: 'week' }),
   });
+  const products = useQuery({ queryKey: ['dash', 'products', range], queryFn: () => get(dashboardApi.products, range) });
+  const topProduct = products.data?.rows?.[0];
+  const otherProducts = (products.data?.rows ?? []).slice(1, 5);
   const topPromos = useQuery({ queryKey: ['dash', 'events', 'promo', range], queryFn: () => get(dashboardApi.events, { ...range, type: 'promo', limit: 10 }) });
 
   const sources = useMemo(() => summary.data?.sources ?? [], [summary.data]);
@@ -141,9 +154,30 @@ export default function Reports() {
             {s?.total ? `Chiếm ${Math.round((promoTotal / s.total) * 100)}% tổng bài` : 'Chưa có bài trong kỳ'}
           </KpiCard>
         </StatusBox>
-        <KpiCard label="Sản phẩm được nhắc nhiều nhất" value="Sắp có">
-          Cần trích tên sản phẩm từ tiêu đề bài
-        </KpiCard>
+        <StatusBox isLoading={products.isLoading} error={products.error} height={98}>
+          <KpiCard label="Sản phẩm được nhắc nhiều nhất" value={topProduct ? <ProductLink name={topProduct.name} /> : '—'}>
+            {!products.data?.configured ? (
+              <span>Chưa có danh sách sản phẩm (Cài đặt › Sản phẩm theo dõi)</span>
+            ) : !topProduct ? (
+              <span>Không có bài nhắc tới sản phẩm nào trong kỳ</span>
+            ) : (
+              <>
+                <span>Trong {topProduct.count} bài</span>
+                {otherProducts.length > 0 && (
+                  <span className="w-full truncate" title={otherProducts.map((p) => `${p.name} (${p.count})`).join(', ')}>
+                    Tiếp theo:{' '}
+                    {otherProducts.map((p, i) => (
+                      <span key={p.name}>
+                        {i > 0 && ', '}
+                        <ProductLink name={p.name} /> ({p.count})
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </>
+            )}
+          </KpiCard>
+        </StatusBox>
         <StatusBox isLoading={when.isLoading} error={when.error} height={98}>
           <KpiCard label="Khung giờ đăng nhiều nhất" value={peak ? SLOTS[peak.j][0] : '—'}>
             {peak ? `${WEEKDAYS[peak.d]} · ${peak.v} bài` : 'Chưa đủ dữ liệu giờ đăng'}

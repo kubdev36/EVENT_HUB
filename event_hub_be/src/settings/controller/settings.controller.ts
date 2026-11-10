@@ -13,6 +13,7 @@ import { Roles } from '../../auth/decorators/roles.decorator.js';
 import { CrawlQueueService } from '../../queue/crawl-queue.service.js';
 import { SaveCrawlerSourcesDto } from '../dto/crawler-sources.dto.js';
 import { SaveKeywordRulesDto } from '../dto/keyword-rules.dto.js';
+import { SaveTrackedProductsDto } from '../dto/tracked-products.dto.js';
 import { RunCrawlerDto } from '../dto/run-crawler.dto.js';
 import { TelegramConfigDto } from '../dto/telegram-config.dto.js';
 import { SettingsService } from '../service/settings.service.js';
@@ -165,6 +166,13 @@ export class SettingsController {
   })
   async updateKeywords(@Body() data: SaveKeywordRulesDto) {
     return this.settingsService.saveSetting('keyword_rules', data);
+  }
+
+  @Post('products')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Lưu danh sách sản phẩm theo dõi' })
+  async updateProducts(@Body() data: SaveTrackedProductsDto) {
+    return this.settingsService.saveSetting('tracked_products', data);
   }
 
   @Post('departments')

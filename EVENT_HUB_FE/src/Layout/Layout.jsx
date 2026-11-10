@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Sidebar from '../Components/Sidebar';
 
 export default function Layout({ currentView, onNavigate, onLogout, user, children }) {
@@ -13,10 +13,12 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         user={user}
+        onLogout={onLogout}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <header className="h-14 px-4 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+        {/* Chỉ hiện trên điện thoại để mở menu; trên máy tính đã có sidebar. */}
+        <header className="lg:hidden h-14 px-4 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -37,13 +39,6 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
             </div>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="h-8 px-3 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition cursor-pointer shrink-0"
-          >
-            <LogOut size={14} />
-            <span>Đăng xuất</span>
-          </button>
         </header>
 
         <main className="flex-1 min-h-0 overflow-y-auto bg-[#f8fafc]">

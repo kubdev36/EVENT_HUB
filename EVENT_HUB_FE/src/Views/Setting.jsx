@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bot, Users, Send, Sliders, Building2, ScrollText, X } from 'lucide-react';
+import { Bot, Users, Send, Sliders, Building2, ScrollText, Smartphone, X } from 'lucide-react';
 import { settingsApi, toCrawlerList } from '../API/API';
 import AuditTab from './Settings/tabs/AuditTab';
 import CrawlerSection from './Settings/sections/CrawlerSection';
@@ -8,12 +8,14 @@ import TelegramSection from './Settings/sections/TelegramSection';
 import { EMPTY_TELEGRAM_CONFIG } from './Settings/sections/telegramConfig';
 import KeywordsSection from './Settings/sections/KeywordsSection';
 import DepartmentsSection from './Settings/sections/DepartmentsSection';
+import ProductsSection from './Settings/sections/ProductsSection';
 
 const TABS = [
   { id: 'crawler', label: 'Cấu hình Crawler', icon: Bot },
   { id: 'users', label: 'Tài khoản nhân viên', icon: Users },
   { id: 'telegram', label: 'Thông báo Telegram', icon: Send },
   { id: 'keywords', label: 'Từ khóa phân loại', icon: Sliders },
+  { id: 'products', label: 'Sản phẩm theo dõi', icon: Smartphone },
   { id: 'departments', label: 'Phòng ban', icon: Building2 },
   { id: 'audit', label: 'Nhật ký', icon: ScrollText },
 ];
@@ -26,6 +28,7 @@ function fromSettings(settings) {
     keywordRules: Array.isArray(settings.keyword_rules) ? settings.keyword_rules : [],
     departmentRules: Array.isArray(settings.department_rules) ? settings.department_rules : [],
     departmentsList: Array.isArray(settings.departments_list) ? settings.departments_list : [],
+    trackedProducts: Array.isArray(settings.tracked_products) ? settings.tracked_products : [],
   };
 }
 
@@ -111,6 +114,9 @@ export default function Setting() {
             </div>
             <div hidden={activeTab !== 'keywords'}>
               <KeywordsSection initialRules={initial.keywordRules} notify={setStatusMessage} />
+            </div>
+            <div hidden={activeTab !== 'products'}>
+              <ProductsSection initialProducts={initial.trackedProducts} notify={setStatusMessage} />
             </div>
             <div hidden={activeTab !== 'departments'}>
               <DepartmentsSection
