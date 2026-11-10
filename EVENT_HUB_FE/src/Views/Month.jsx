@@ -6,6 +6,7 @@ import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { useRangeEvents } from '../API/useDashboardEvents';
 import DayEventsModal from './month/DayEventsModal';
 import { buildCalendarDays } from './month/calendar';
+import { safeHttpUrl } from './dashboard/shared';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -225,11 +226,11 @@ export default function Month() {
                 >
                   Đóng
                 </button>
-                {selectedEvent.url && (
+                {safeHttpUrl(selectedEvent.url) && (
                   <a
-                    href={selectedEvent.url}
+                    href={safeHttpUrl(selectedEvent.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="flex items-center gap-1 px-3.5 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition font-medium shadow-2xs"
                   >
                     Xem chi tiết <ExternalLink size={12} />

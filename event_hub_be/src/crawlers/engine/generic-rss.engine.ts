@@ -5,7 +5,6 @@ import { ParsedCrawlItem } from '../crawler.types.js';
 import { CrawlerHttpClient, CrawlFetchError } from './crawler-http.client.js';
 import { DateExtractorHelper } from '../helpers/date-extractor.helper.js';
 import { NoiseFilterHelper } from '../helpers/noise-filter.helper.js';
-import { UrlNormalizerHelper } from '../helpers/url-normalizer.helper.js';
 
 @Injectable()
 export class GenericRssEngine {

@@ -12,7 +12,7 @@ import {
   Clock
 } from 'lucide-react';
 import { eventImage, useImageEvents, useSources } from '../API/useDashboardEvents';
-import { addDays, vnToday } from './dashboard/shared';
+import { addDays, safeHttpUrl, vnToday } from './dashboard/shared';
 import DateRangeFilter from './media/DateRangeFilter';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
@@ -335,11 +335,11 @@ export default function MediaLibrary() {
                 <h3 className="text-xs sm:text-sm font-bold leading-snug">{currentPhoto.title}</h3>
                 {currentPhoto.desc && <p className="text-[11px] sm:text-xs text-white/70 leading-relaxed">{currentPhoto.desc}</p>}
 
-                {currentPhoto.url && (
+                {safeHttpUrl(currentPhoto.url) && (
                   <a
-                    href={currentPhoto.url}
+                    href={safeHttpUrl(currentPhoto.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[11px] sm:text-xs text-red-400 font-semibold hover:underline pt-1"
                   >
                     Xem bài viết gốc <ExternalLink size={12} />

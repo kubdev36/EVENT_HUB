@@ -38,8 +38,8 @@ export class NoiseFilterHelper {
       .replace(/&#39;/g, "'");
 
     // Remove author + Date / relative time at end
-    title = title.replace(/\s+[\p{L}\s.]{2,30}\s+(?:\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?|\d+\s*(?:giờ|ngày|phút|tuần)\s*(?:trước|sau))$/iu, '');
-    title = title.replace(/\s+(?:\d+\s*(?:giờ|ngày|phút|tuần)\s*(?:trước|sau)|\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?)$/iu, '');
+    title = title.replace(/\s+[\p{L}\s.]{2,30}\s+(?:\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?|\d+\s*(?:giờ|ngày|phút|tuần)\s*(?:trước|sau))$/iu, '');
+    title = title.replace(/\s+(?:\d+\s*(?:giờ|ngày|phút|tuần)\s*(?:trước|sau)|\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?)$/iu, '');
 
     // Remove brand suffixes (e.g. " - Fptshop.com.vn", " | CellphoneS")
     title = title.replace(/\s*[-|]\s*[A-Za-z0-9.-]+(?:\.com|\.vn|\.com\.vn)?\s*$/i, '');

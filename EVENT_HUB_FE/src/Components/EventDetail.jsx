@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Clock, FileEdit, ExternalLink } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { safeHttpUrl } from '../Views/dashboard/shared';
 
 export default function EventDetail({ data, onClose }) {
   const [activeTab, setActiveTab] = useState('events');
@@ -112,11 +113,11 @@ export default function EventDetail({ data, onClose }) {
                   <div className="text-xs font-bold text-slate-900 leading-snug flex-1">
                     {event.fullTitle || event.title}
                   </div>
-                  {event.url && (
+                  {safeHttpUrl(event.url) && (
                     <a
-                      href={event.url}
+                      href={safeHttpUrl(event.url)}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 shrink-0 transition"
                     >
                       <span>Chi tiết</span>
