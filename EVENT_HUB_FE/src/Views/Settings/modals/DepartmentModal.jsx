@@ -9,6 +9,7 @@ export default function DepartmentModal({
   onClose,
   onSave,
   saving = false,
+  error = '',
 }) {
   if (!isOpen) return null;
 
@@ -91,6 +92,12 @@ export default function DepartmentModal({
               className="w-full rounded-lg border border-slate-200 p-2 outline-none text-xs focus:border-blue-500"
             />
           </div>
+
+          {error && (
+            <p role="alert" className="text-rose-600 text-[11px] font-medium">
+              {error}
+            </p>
+          )}
 
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <button
