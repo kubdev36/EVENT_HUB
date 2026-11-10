@@ -4,11 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { Role } from '../../auth/enums/role.enum.js';
 import { User } from '../entity/user.entity.js';
 import { SessionService } from '../../auth/service/session.service.js';
+import { PasswordHasher } from '../../auth/password-hasher.js';
+
+/** Không bao giờ trả mã băm mật khẩu ra ngoài (select: false chỉ áp dụng khi đọc từ DB). */
+function withoutPassword(user: User): Omit<User, 'password'> {
+  const { password: _password, ...rest } = user;
+  return rest;
+}
 
 @Injectable()
 export class UsersService {
@@ -16,6 +22,7 @@ export class UsersService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly sessions: SessionService,
+    private readonly hasher: PasswordHasher,
   ) {}
 
   async findAll() {
@@ -42,9 +49,8 @@ export class UsersService {
       throw new BadRequestException('Email already exists.');
     }
 
-    const hashedPassword = await bcrypt.hash(
+    const hashedPassword = await this.hasher.hash(
       dto.password || 'EventHub@2026',
-      10,
     );
     const user = this.userRepository.create({
       email,
@@ -53,7 +59,7 @@ export class UsersService {
       department: dto.department || 'MKT',
     });
 
-    return this.userRepository.save(user);
+    return withoutPassword(await this.userRepository.save(user));
   }
 
   async update(id: string, dto: any) {
@@ -72,20 +78,20 @@ export class UsersService {
       dto.password && !String(dto.password).includes('•'),
     );
     if (passwordChanged) {
-      user.password = await bcrypt.hash(dto.password, 10);
+      user.password = await this.hasher.hash(dto.password);
     }
 
     const saved = await this.userRepository.save(user);
     // Đổi mật khẩu thì đăng xuất mọi phiên đang mở của tài khoản đó.
     if (passwordChanged) await this.sessions.revokeAllForUser(user.id);
-    return saved;
+    return withoutPassword(saved);
   }
 
   async resetPassword(id: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Account not found.');
 
-    user.password = await bcrypt.hash('EventHub@2026', 10);
+    user.password = await this.hasher.hash('EventHub@2026');
     await this.userRepository.save(user);
     await this.sessions.revokeAllForUser(user.id);
 

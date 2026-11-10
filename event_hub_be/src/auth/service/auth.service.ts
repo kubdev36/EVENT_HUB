@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import { PasswordHasher } from '../password-hasher.js';
 import { Repository } from 'typeorm';
 import { LoginDto } from '../dto/login.dto.js';
 import { User } from '../../users/entity/user.entity.js';
@@ -18,6 +18,7 @@ export class AuthService implements OnModuleInit {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService, // Inject ConfigService để đọc biến môi trường
+    private readonly hasher: PasswordHasher,
   ) {}
 
   // Tự động khởi tạo tài khoản Admin từ .env nếu bảng users chưa có
@@ -33,7 +34,7 @@ export class AuthService implements OnModuleInit {
     });
 
     if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await this.hasher.hash(adminPassword);
       const admin = this.userRepository.create({
         email,
         password: hashedPassword,
@@ -59,9 +60,15 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException('Account has been disabled.');
     }
 
-    const isMatch = await bcrypt.compare(loginDto.password, user.password);
-    if (!isMatch) {
+    const check = await this.hasher.verify(loginDto.password, user.password);
+    if (!check.ok) {
       throw new UnauthorizedException('Email or password is incorrect.');
+    }
+    // Mật khẩu còn băm kiểu cũ (chưa có pepper): băm lại ngay khi biết mật khẩu đúng.
+    if (check.needsUpgrade) {
+      await this.userRepository.update(user.id, {
+        password: await this.hasher.hash(loginDto.password),
+      });
     }
 
     // Token do SessionService cấp (access token ngắn hạn + refresh token xoay vòng).

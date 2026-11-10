@@ -154,7 +154,7 @@ describe('Phân quyền', () => {
       string,
       object
     >;
-    for (const name of ['runAllPost', 'runOne']) {
+    for (const name of ['runAll', 'runOne']) {
       expect(Reflect.getMetadata(ROLES_KEY, proto[name])).toEqual([Role.ADMIN]);
     }
     const getRoutes = Object.getOwnPropertyNames(CrawlerController.prototype)
@@ -242,6 +242,7 @@ describe('Kiểm tra biến môi trường', () => {
         NODE_ENV: 'production',
         CORS_ORIGINS: 'https://a.vn',
         SETTINGS_ENC_KEY: Buffer.alloc(32, 1).toString('base64'),
+        PASSWORD_PEPPER: 'p'.repeat(40),
       }),
     ).toBeTruthy();
   });
@@ -255,6 +256,29 @@ describe('Kiểm tra biến môi trường', () => {
     expect(() => validateEnv(prod)).toThrow('SETTINGS_ENC_KEY');
     expect(() => validateEnv({ ...base, SETTINGS_ENC_KEY: 'abc' })).toThrow(
       '32 byte',
+    );
+  });
+});
+
+describe('PASSWORD_PEPPER', () => {
+  const base = {
+    DB_HOST: 'db',
+    DB_PORT: '5432',
+    DB_USERNAME: 'u',
+    DB_PASSWORD: 'p',
+    DB_NAME: 'n',
+    jwt_token: 'x'.repeat(40),
+  };
+  it('production thiếu pepper thì không khởi động; pepper ngắn thì báo lỗi', () => {
+    const prod = {
+      ...base,
+      NODE_ENV: 'production',
+      CORS_ORIGINS: 'https://a.vn',
+      SETTINGS_ENC_KEY: Buffer.alloc(32, 1).toString('base64'),
+    };
+    expect(() => validateEnv(prod)).toThrow('PASSWORD_PEPPER');
+    expect(() => validateEnv({ ...base, PASSWORD_PEPPER: 'ngan' })).toThrow(
+      '32 ký tự',
     );
   });
 });

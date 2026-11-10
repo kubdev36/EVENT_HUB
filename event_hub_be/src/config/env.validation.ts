@@ -44,6 +44,12 @@ export function validateEnv(
       errors.push(
         'Thiếu SETTINGS_ENC_KEY ở production (khóa mã hóa token Telegram)',
       );
+    if (!str('PASSWORD_PEPPER'))
+      errors.push('Thiếu PASSWORD_PEPPER ở production (pepper băm mật khẩu)');
+  }
+
+  if (str('PASSWORD_PEPPER') && str('PASSWORD_PEPPER').length < 32) {
+    errors.push('PASSWORD_PEPPER phải dài ít nhất 32 ký tự');
   }
 
   if (str('SETTINGS_ENC_KEY')) {
