@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, X, ExternalLink, Calendar as Ca
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { useRangeEvents } from '../API/useDashboardEvents';
 import DayEventsModal from './month/DayEventsModal';
+import { buildCalendarDays } from './month/calendar';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -39,36 +40,7 @@ export default function Month() {
       .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   }, [sources, isEventVisible]);
 
-  const calendarDays = useMemo(() => {
-    const firstDayIndex = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrev = new Date(year, month, 0).getDate();
-
-    const days = [];
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      days.push({
-        day: daysInPrev - i,
-        dateStr: `${year}-${String(month).padStart(2, '0')}-${String(daysInPrev - i).padStart(2, '0')}`,
-        current: false,
-      });
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push({
-        day: i,
-        dateStr: `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
-        current: true,
-      });
-    }
-    const remaining = 42 - days.length;
-    for (let i = 1; i <= remaining; i++) {
-      days.push({
-        day: i,
-        dateStr: `${year}-${String(month + 2).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
-        current: false,
-      });
-    }
-    return days;
-  }, [year, month]);
+  const calendarDays = buildCalendarDays(year, month);
 
   const changeMonth = (offset) => {
     setCurrentDate(new Date(year, month + offset, 1));
