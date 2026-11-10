@@ -27,6 +27,8 @@ Chạy trong `event_hub_be` khi có thay đổi backend:
 
 Với frontend, chạy các script có trong `EVENT_HUB_FE/package.json`. Sửa lỗi hành vi thì thêm test tái hiện lỗi đó.
 
+Test (`*.spec.ts`, `*.test.js`, thư mục `event_hub_be/test/`) chỉ giữ trên máy, không commit lên git: đã có trong `.gitignore`. Không dùng `git add -f` cho các file này.
+
 ## Code
 
 - Theo kế hoạch trong [docs/refactor-plan.md](docs/refactor-plan.md). Thay đổi kiến trúc khác kế hoạch thì phải hỏi và cập nhật tài liệu.

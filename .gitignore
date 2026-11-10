@@ -1,1 +1,10 @@
 backups/
+
+# Test chỉ giữ trên máy, không đưa lên git (quyết định 10/11/2026)
+*.spec.ts
+*.e2e-spec.ts
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+event_hub_be/test/
