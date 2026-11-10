@@ -13,6 +13,7 @@ import {
   Plus,
   Check,
   X,
+  LogOut,
 } from 'lucide-react';
 import { useSources } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
@@ -61,7 +62,7 @@ function getDepartmentViewId(code) {
   return `dept-${norm}`;
 }
 
-export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user }) {
+export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user, onLogout }) {
   // Chỉ cần tên và logo của đối thủ: gọi API nhẹ, không tải toàn bộ bài viết.
   const { sources: allSources } = useSources();
   const sources = allSources.filter((s) => !s.own);
@@ -157,12 +158,12 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
         }`}
       >
         {/* Header của Sidebar (Cố định chiều cao, không bị cuộn) */}
-        <div className="h-16 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+        <div className="h-20 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <img src="/img/mtm.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain border border-slate-100 shadow-2xs" />
+            <img src="/img/mtm.png" alt="Logo" className="w-14 h-14 rounded-xl object-contain border border-slate-100" />
             <div>
-              <div className="text-[14px] font-bold text-slate-900 leading-tight">Event Hub</div>
-              <div className="text-[10px] font-medium text-slate-400 leading-tight">Intelligence Center</div>
+              <div className="text-[16px] font-bold text-slate-900 leading-tight">Event Hub</div>
+              <div className="text-[11px] font-medium text-slate-400 leading-tight">Intelligence Center</div>
             </div>
           </div>
 
@@ -184,13 +185,13 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                 <button
                   key={item.id}
                   onClick={() => handleItemClick(item.id)}
-                  className={`w-full h-9 rounded-lg px-3 flex items-center gap-3 text-[13px] font-medium transition-all cursor-pointer ${
+                  className={`relative w-full h-9 rounded-lg px-3 flex items-center gap-3 text-[13px] font-medium transition-all cursor-pointer ${
                     active
-                      ? 'bg-[#1877f2] text-white shadow-xs font-semibold'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      ? 'bg-blue-50 text-blue-700 font-semibold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-blue-600'
+                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                   }`}
                 >
-                  <Icon size={16} className={active ? 'text-white' : 'text-slate-500'} />
+                  <Icon size={16} className={active ? 'text-blue-600' : 'text-slate-500'} />
                   <span>{item.label}</span>
                 </button>
               );
@@ -198,7 +199,7 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
           </nav>
 
           <div className="pt-2 border-t border-slate-100">
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 px-1">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-1">
               Bộ lọc nhanh
             </div>
             <div className="space-y-1.5 px-1">
@@ -225,7 +226,7 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
           </div>
 
           <div className="pt-2 border-t border-slate-100">
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 px-1">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-1">
               Đối thủ nổi bật
             </div>
             <div className="space-y-1">
@@ -253,7 +254,7 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                 <button
                   type="button"
                   onClick={openAddCrawler}
-                  className="w-full text-left flex items-center gap-1.5 px-1 py-1.5 text-xs font-semibold text-[#1877f2] hover:text-blue-700 mt-1 cursor-pointer"
+                  className="w-full text-left flex items-center gap-1.5 px-1 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 mt-1 cursor-pointer"
                 >
                   <Plus size={14} />
                   <span>Thêm đối thủ</span>
@@ -261,6 +262,23 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
               )}
             </div>
           </div>
+        </div>
+
+        {/* Tài khoản và đăng xuất, luôn nằm cuối sidebar. */}
+        <div className="shrink-0 border-t border-slate-100 p-3">
+          {user?.email && (
+            <div className="px-1 pb-2 text-[11px] text-slate-500 truncate" title={user.email}>
+              {user.email}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full h-9 rounded-lg px-3 flex items-center gap-3 text-[13px] font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition cursor-pointer"
+          >
+            <LogOut size={16} className="text-slate-500" />
+            <span>Đăng xuất</span>
+          </button>
         </div>
       </aside>
 

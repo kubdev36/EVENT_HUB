@@ -98,7 +98,7 @@ export default function CrawlerModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] bg-blue-950/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="w-full max-w-lg rounded-2xl border border-blue-100 bg-white shadow-2xl flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
           <div className="text-xs font-bold uppercase tracking-wider">

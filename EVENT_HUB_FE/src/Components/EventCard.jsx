@@ -57,7 +57,7 @@ export default function EventCard({ data, onOpenDetail }) {
                   }
                 }}
                 title="Bấm để xem chi tiết sự kiện của hãng"
-                className="group text-left rounded-lg border border-slate-200/90 bg-white p-2 hover:border-[#1877f2] hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between"
+                className="group text-left rounded-lg border border-slate-200/90 bg-white p-2 hover:border-[var(--color-blue-600)] hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between text-[10px] mb-1.5 gap-1">
@@ -129,7 +129,7 @@ export default function EventCard({ data, onOpenDetail }) {
 
         <button
           onClick={() => onOpenDetail?.(data)}
-          className="mt-2 text-[11px] font-semibold text-[#1877f2] hover:text-blue-700 flex items-center gap-1 self-start cursor-pointer"
+          className="mt-2 text-[11px] font-semibold text-[var(--color-blue-600)] hover:text-blue-700 flex items-center gap-1 self-start cursor-pointer"
         >
           <span>Xem chi tiết</span>
           <ChevronRight size={13} />

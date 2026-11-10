@@ -336,7 +336,7 @@ export default function MediaLibrary() {
                     href={currentPhoto.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs text-[#2997ff] font-semibold hover:underline pt-1"
+                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs text-red-400 font-semibold hover:underline pt-1"
                   >
                     Xem bài viết gốc <ExternalLink size={12} />
                   </a>

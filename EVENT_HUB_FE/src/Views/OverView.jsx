@@ -150,7 +150,7 @@ export default function Overview() {
               (showTable ? (
                 <SeriesTable days={series.data.days} series={lineSeries} nameOf={nameOf} />
               ) : (
-                <DailyLineChart days={series.data.days} series={lineSeries} nameOf={nameOf} colorOf={colorOf} />
+                <DailyLineChart days={series.data.days} series={lineSeries} nameOf={nameOf} colorOf={colorOf} height={440} />
               ))}
           </StatusBox>
         </Card>
