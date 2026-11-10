@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { auditApi } from '../../../API/API';
+import { statusLabel } from './auditStatus';
 
 const PAGE_SIZE = 50;
 
@@ -86,9 +87,19 @@ export default function AuditTab() {
                   {log.success ? (
                     <span className="text-emerald-700 font-semibold">Thành công</span>
                   ) : (
-                    <span className="text-red-600 font-semibold" title={log.errorMessage || ''}>
-                      Lỗi {log.statusCode}
-                    </span>
+                    <div className="max-w-[360px] space-y-0.5">
+                      <div className="text-red-600 font-semibold">
+                        Lỗi {log.statusCode}
+                        {statusLabel(log.statusCode) && (
+                          <span className="font-normal"> · {statusLabel(log.statusCode)}</span>
+                        )}
+                      </div>
+                      {log.errorMessage && (
+                        <div className="text-[11px] text-red-500 break-words whitespace-pre-wrap">
+                          {log.errorMessage}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>

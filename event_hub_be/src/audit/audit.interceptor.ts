@@ -53,10 +53,47 @@ export class AuditInterceptor implements NestInterceptor {
             ...base,
             statusCode: err instanceof HttpException ? err.getStatus() : 500,
             success: false,
-            errorMessage: err instanceof Error ? err.message : String(err),
+            errorMessage: AuditInterceptor.describeError(err),
           }),
       }),
     );
+  }
+
+  /**
+   * Nội dung lỗi dễ đọc cho trang Nhật ký: lấy chi tiết của HttpException
+   * (vd. từng lỗi kiểm tra dữ liệu), ghi rõ lỗi hệ thống và che giá trị bí mật.
+   */
+  static describeError(err: unknown): string {
+    let text: string;
+    if (err instanceof HttpException) {
+      const body = err.getResponse();
+      const detail =
+        typeof body === 'string'
+          ? body
+          : (body as { message?: unknown })?.message;
+      const parts = Array.isArray(detail)
+        ? detail.map(String)
+        : [typeof detail === 'string' && detail ? detail : err.message];
+      text = parts.join('; ');
+      if (err.getStatus() === 400 && Array.isArray(detail))
+        text = `Lỗi dữ liệu: ${text}`;
+    } else if (err instanceof Error) {
+      text = `Lỗi hệ thống (${err.name}): ${err.message}`;
+    } else {
+      text = `Lỗi hệ thống: ${String(err)}`;
+    }
+    return AuditInterceptor.redactSecrets(text).slice(0, 500);
+  }
+
+  /** Che giá trị dạng token=..., password: ..., bot123:ABC... trong nội dung lỗi. */
+  static redactSecrets(text: string): string {
+    return text
+      .replace(
+        /\b(password|passwd|pwd|token|secret|api[_-]?key|authorization|cookie)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi,
+        '$1$2***',
+      )
+      .replace(/\bbot\d+:[\w-]{20,}/gi, 'bot***')
+      .replace(/\bBearer\s+[\w.-]+/gi, 'Bearer ***');
   }
 
   static describe(req: AuditRequest) {
