@@ -8,6 +8,7 @@ import { CrawlerRun, CrawlerRunStatus } from '../entity/crawler-run.entity.js';
 import { CrawlerHttpClient } from '../engine/crawler-http.client.js';
 import { isDue, mapWithConcurrency } from '../helpers/schedule.helper.js';
 import { EventUpsertService } from '../persistence/event-upsert.service.js';
+import { SitemapSeenService } from '../persistence/sitemap-seen.service.js';
 import { CrawlPipeline } from '../pipeline/crawl-pipeline.service.js';
 import { CrawlSourceReader } from '../sources/crawl-source.reader.js';
 import { CrawlLockService } from './crawl-lock.service.js';
@@ -45,6 +46,7 @@ export class CrawlerService implements OnApplicationBootstrap {
     private readonly httpClient: CrawlerHttpClient,
     private readonly lockService: CrawlLockService,
     private readonly imageStore: ImageStoreService,
+    private readonly sitemapSeen: SitemapSeenService,
   ) {}
 
   /** Khởi động lại sau khi process chết: dọn các lượt cào bị kẹt ở running. */
@@ -186,7 +188,8 @@ export class CrawlerService implements OnApplicationBootstrap {
     );
 
     try {
-      const { items, errors, attempts } = await this.pipeline.fetch(target);
+      const { items, errors, attempts, pendingSeen } =
+        await this.pipeline.fetch(target);
       const validItems = this.pipeline.filter(target, items);
       const rules = await this.sources.getKeywordRules();
       const existing = await this.upsert.loadExisting(target.id);
@@ -198,6 +201,8 @@ export class CrawlerService implements OnApplicationBootstrap {
       );
       await this.pipeline.enrichFromDetails(target, prepared);
       const newItemsCount = await this.upsert.persist(target, prepared);
+      // Chỉ ghi link sitemap là đã thấy sau khi lưu sự kiện xong: lỗi giữa chừng thì lần sau xử lý lại.
+      for (const p of pendingSeen) await this.sitemapSeen.markSeen(p);
 
       const status = CrawlPipeline.resolveRunStatus(errors, attempts);
       run.status = status;
@@ -249,6 +254,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       ...(target.targetUrls || []),
       ...(target.api?.endpoint ? [target.api.endpoint] : []),
       ...(target.ajaxEndpoint ? [target.ajaxEndpoint] : []),
+      ...(target.sitemaps || []).map((s) => s.url),
     ]
       .filter((u) => /^https?:\/\//i.test(u?.trim() || ''))
       .map((u) => CrawlerHttpClient.hostKey(u.trim()));

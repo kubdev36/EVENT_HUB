@@ -197,14 +197,18 @@ export class CrawlerHttpClient {
    * Tải file nhị phân (vd. ảnh) qua cùng hàng đợi giới hạn tốc độ và chống SSRF như trang HTML.
    * Dừng đọc khi vượt maxBytes. 401/403/429 trả blocked, không thử vượt qua.
    */
-  async fetchBinary(url: string, maxBytes: number): Promise<FetchBinaryResult> {
+  async fetchBinary(
+    url: string,
+    maxBytes: number,
+    accept = 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+  ): Promise<FetchBinaryResult> {
     if (!url || !/^https?:\/\//i.test(url))
       return { kind: 'failed', url, reason: 'URL không phải http(s)' };
     let resp: Response;
     try {
       resp = await this.fetchFollowingSafeRedirects(url, (u) => ({
         'user-agent': this.userAgents[0],
-        accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+        accept,
         referer: `${new URL(u).origin}/`,
       }));
     } catch (err) {

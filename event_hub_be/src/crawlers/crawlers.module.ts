@@ -24,11 +24,15 @@ import { EventNotifierService } from '../notifications/event-notifier.service.js
 import { CrawlSourceReader } from './sources/crawl-source.reader.js';
 import { CrawlPipeline } from './pipeline/crawl-pipeline.service.js';
 import { EventUpsertService } from './persistence/event-upsert.service.js';
+import { SitemapSeenUrl } from './entity/sitemap-seen-url.entity.js';
+import { SitemapSeenService } from './persistence/sitemap-seen.service.js';
+import { GenericSitemapEngine } from './engine/generic-sitemap.engine.js';
+import { SitemapDiscoveryService } from './pipeline/sitemap-discovery.service.js';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([Event, CrawlerRun, Setting]),
+    TypeOrmModule.forFeature([Event, CrawlerRun, Setting, SitemapSeenUrl]),
     AuthModule,
     ImagesModule,
     NotificationsModule,
@@ -50,6 +54,9 @@ import { EventUpsertService } from './persistence/event-upsert.service.js';
     CrawlSourceReader,
     CrawlPipeline,
     EventUpsertService,
+    SitemapSeenService,
+    GenericSitemapEngine,
+    SitemapDiscoveryService,
     CrawlQueueService,
   ],
   exports: [CrawlerService, CrawlQueueService],

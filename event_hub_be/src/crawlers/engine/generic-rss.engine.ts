@@ -154,10 +154,8 @@ export class GenericRssEngine {
         const title = NoiseFilterHelper.cleanTitle(
           urlNode.find('news\\:title, title').text().trim(),
         );
-        const pubDate = urlNode
-          .find('news\\:publication_date, lastmod')
-          .text()
-          .trim();
+        // Chỉ ngày đăng của Google News; lastmod là ngày sửa trang (có web tạo lại mỗi đêm), không phải ngày đăng.
+        const pubDate = urlNode.find('news\\:publication_date').text().trim();
 
         if (loc && title && !NoiseFilterHelper.isNoiseTitle(title)) {
           const parsedDate = DateExtractorHelper.withoutMidnightTime(

@@ -640,6 +640,18 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 . Pepper nằm trong biến môi trường (bắt buộc ở production, ít nhất 32 ký tự), không trong DB. Mã băm kiểu cũ vẫn đăng nhập được và được băm lại khi đăng nhập thành công (không cần migration). Chưa có pepper (dev) thì băm kiểu cũ. Mất hoặc đổi pepper thì mọi người phải đặt lại mật khẩu.
 - Sửa thêm: `POST /users` và `PUT /users/:id` từng trả mã băm mật khẩu trong phản hồi.
 
+### Phát hiện trang mới qua sitemap (10/11/2026)
+
+Mục đích: báo landing page khuyến mãi mới (vd. `/flash-sale`), loại trang không có trong mục tin tức. Không thay cho tin tức, vì landing page thường không có ngày đăng và hay bị dùng lại qua nhiều năm.
+
+- Cấu hình theo nguồn: `sitemaps: [{ url, includePattern, excludePattern?, childPattern?, maxNewPerRun? }]`, lưu cùng cấu hình nguồn trong DB, không hardcode theo đối thủ. Regex áp lên pathname.
+- `GenericSitemapEngine` đọc `urlset` và `sitemapindex` (chỉ mở file con khớp `childPattern`, tối đa 3 file). Tải qua `CrawlerHttpClient` (chống SSRF, giới hạn theo domain), tối đa 15 MB một file. Chỉ nhận link http(s) cùng domain. Bị chặn hoặc lỗi thì báo `blocked`/`failed`.
+- Bảng `sitemap_seen_urls` lưu link đã thấy theo nguồn. Lần đầu với một sitemap: chỉ ghi lại link có sẵn, không tạo sự kiện. Các lần sau: link chưa có là trang mới, mở tối đa `maxNewPerRun` trang (mặc định 10). Link chỉ được ghi là đã thấy sau khi lưu sự kiện xong; trang mở lỗi hoặc vượt giới hạn để lần sau.
+- Ngày đăng chỉ lấy từ dữ liệu có cấu trúc của trang (JSON-LD, `article:published_time`...). Không dùng `lastmod` hay ngày crawl; `lastmod` lưu trong `rawData` để tham khảo. Trang không có ngày thì `dateUnknown`, nên không vào hàng chờ Telegram.
+- Sửa engine RSS: sitemap Google News chỉ lấy `news:publication_date` làm ngày đăng, bỏ `lastmod` (CellphoneS tạo lại sitemap mỗi đêm nên `lastmod` của mọi link giống nhau).
+- Khảo sát 10/11/2026: Hoàng Hà (`/sitemap.xml`) có `lastmod` riêng từng link và nhiều landing page sale; CellphoneS (`/sitemap/page-sitemap.xml`) có 1.363 trang nhưng `lastmod` giống nhau; FPT Shop, Di Động Việt đã có tin tức; Thế giới di động không có sitemap landing page.
+- Chưa làm: báo "trang cũ vừa cập nhật" theo `lastmod` (dễ nhiễu), form cấu hình sitemap trên giao diện.
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |
