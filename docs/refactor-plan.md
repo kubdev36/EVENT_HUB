@@ -313,6 +313,10 @@ Cào lại lần hai không tạo event trùng (0 URL trùng). Chưa làm: diễ
 - Kiểm chứng (DB tạm): API đẩy việc khi không có worker thì việc nằm chờ, API không cào; bật worker thì việc được cào và hoàn tất. Test `crawl-queue.service.db.spec.ts`: worker chết giữa chừng thì worker khác chạy lại việc.
 - Sự cố khi kiểm chứng: tiến trình thử nghiệm đọc `telegram_bot_token` thật trong `event_hub_be/.env` và gửi 13 tin Telegram thật (bài Thế giới di động) vào nhóm. Từ nay chạy thử phải đặt rỗng `telegram_bot_token` và `telegram_chat_id`.
 
+### Quyết định 10/11/2026
+
+- Bỏ "Xuất Excel" và "Gửi báo cáo tuần qua Telegram" khỏi kế hoạch (người dùng thấy không cần thiết); đã gỡ hai nút "sắp có" ở trang Báo cáo. Giữ "Xuất CSV".
+
 ### Rủi ro
 
 | Rủi ro | Cách giảm |

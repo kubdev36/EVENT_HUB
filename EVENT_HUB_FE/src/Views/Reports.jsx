@@ -127,12 +127,6 @@ export default function Reports() {
           >
             {exporting ? 'Đang xuất...' : 'Xuất CSV'}
           </button>
-          <button type="button" disabled title="Sắp có" className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs text-slate-400 cursor-not-allowed">
-            Xuất Excel · sắp có
-          </button>
-          <button type="button" disabled title="Sắp có" className="rounded-lg px-3 py-1.5 text-xs bg-blue-600/40 text-white cursor-not-allowed">
-            Gửi báo cáo tuần qua Telegram · sắp có
-          </button>
         </div>
       </div>
 
