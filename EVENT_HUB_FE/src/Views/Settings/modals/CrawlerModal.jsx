@@ -133,7 +133,7 @@ export default function CrawlerModal({
                     alt="Logo preview"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = '/img/mtm.jpg';
+                      e.currentTarget.src = '/img/mtm.png';
                     }}
                     className="w-10 h-10 rounded-lg object-contain border border-slate-200 p-1 bg-white shadow-xs"
                   />

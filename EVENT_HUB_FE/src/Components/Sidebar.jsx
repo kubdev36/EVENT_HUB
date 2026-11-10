@@ -159,7 +159,7 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
         {/* Header của Sidebar (Cố định chiều cao, không bị cuộn) */}
         <div className="h-16 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <img src="/img/mtm.jpg" alt="Logo" className="w-9 h-9 rounded-lg object-contain border border-slate-100 shadow-2xs" />
+            <img src="/img/mtm.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain border border-slate-100 shadow-2xs" />
             <div>
               <div className="text-[14px] font-bold text-slate-900 leading-tight">Event Hub</div>
               <div className="text-[10px] font-medium text-slate-400 leading-tight">Intelligence Center</div>
@@ -237,11 +237,11 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
                   <img
                     loading="lazy"
                     referrerPolicy="no-referrer"
-                    src={item.logo || '/img/mtm.jpg'}
+                    src={item.logo || '/img/mtm.png'}
                     alt={item.name}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = '/img/mtm.jpg';
+                      e.currentTarget.src = '/img/mtm.png';
                     }}
                     className="w-4 h-4 rounded object-contain border border-slate-100 bg-white"
                   />

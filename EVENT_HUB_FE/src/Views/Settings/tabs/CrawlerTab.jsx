@@ -53,11 +53,11 @@ export default function CrawlerTab({
                 <img
                   loading="lazy"
                   referrerPolicy="no-referrer"
-                  src={c.logo || '/img/mtm.jpg'}
+                  src={c.logo || '/img/mtm.png'}
                   alt={c.name}
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = '/img/mtm.jpg';
+                    e.currentTarget.src = '/img/mtm.png';
                   }}
                   className="w-8 h-8 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0"
                 />

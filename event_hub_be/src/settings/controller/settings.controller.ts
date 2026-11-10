@@ -55,7 +55,7 @@ export class SettingsController {
                 enum: ['web', 'facebook'],
                 example: 'web',
               },
-              logo: { type: 'string', example: '/img/mtm.jpg' },
+              logo: { type: 'string', example: '/img/mtm.png' },
               enabled: { type: 'boolean', example: true },
               interval: { type: 'string', example: '6h' },
               targetUrls: {
@@ -70,7 +70,7 @@ export class SettingsController {
               id: 'cellphones',
               name: 'CellphoneS',
               type: 'web',
-              logo: '/img/mtm.jpg',
+              logo: '/img/mtm.png',
               enabled: true,
               interval: '6h',
               targetUrls: ['https://cellphones.com.vn/danh-sach-khuyen-mai'],

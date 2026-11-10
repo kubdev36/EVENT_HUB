@@ -29,7 +29,7 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
               <img
                 loading="lazy"
                 referrerPolicy="no-referrer"
-                src="/img/mtm.jpg"
+                src="/img/mtm.png"
                 alt="Logo"
                 className="w-7 h-7 rounded-md object-contain border border-slate-100 shadow-2xs shrink-0"
               />

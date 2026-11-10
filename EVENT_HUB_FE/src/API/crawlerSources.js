@@ -48,7 +48,7 @@ export function buildNewCrawler(formData, existingIds) {
   return {
     id,
     name,
-    logo: formData.logo || '/img/mtm.jpg',
+    logo: formData.logo || '/img/mtm.png',
     enabled: true,
     interval: formData.interval || '6h',
     targetUrls: (formData.targetUrls || []).map((u) => u.trim()).filter(Boolean),

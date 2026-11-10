@@ -7,7 +7,7 @@ export default function EventDetail({ data, onClose }) {
 
   if (!data) return null;
 
-  const logoUrl = data?.logo || '/img/mtm.jpg';
+  const logoUrl = data?.logo || '/img/mtm.png';
 
   const getFormattedDate = () => {
     const dateStr = data.events?.[0]?.date;
@@ -52,7 +52,7 @@ export default function EventDetail({ data, onClose }) {
               alt={data.name}
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src = '/img/mtm.jpg';
+                e.currentTarget.src = '/img/mtm.png';
               }}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 shrink-0 shadow-2xs p-0.5 bg-white"
             />

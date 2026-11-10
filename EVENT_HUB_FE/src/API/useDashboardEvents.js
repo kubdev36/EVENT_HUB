@@ -11,13 +11,13 @@ export function eventImage(e) {
 /** Logo mặc định theo id/tên nguồn khi cấu hình chưa có logo. */
 export function fallbackLogo(id = '', name = '') {
   const s = `${id} ${name}`.toLowerCase();
-  if (s.includes('minhtuan') || s.includes('minh tuấn') || s.includes('minh tuan')) return '/img/mtm.jpg';
+  if (s.includes('minhtuan') || s.includes('minh tuấn') || s.includes('minh tuan')) return '/img/mtm.png';
   if (s.includes('cellphones')) return '/img/cellphones.png';
   if (s.includes('hoangha') || s.includes('hoàng hà') || s.includes('hoang ha')) return '/img/hoangha.jpg';
   if (s.includes('fpt')) return '/img/fpt.png';
   if (s.includes('tgdd') || s.includes('thegioididong') || s.includes('thế giới di động')) return '/img/tgdd.jpg';
   if (s.includes('nguyenkim') || s.includes('nguyễn kim')) return '/img/nguyenkim.png';
-  return '/img/mtm.jpg';
+  return '/img/mtm.png';
 }
 
 /** Danh sách nguồn (id, tên, logo) — nhẹ, dùng cho thanh menu. */

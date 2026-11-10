@@ -60,7 +60,7 @@ export default function MediaLibrary() {
           url: e.url,
           brandId: e.sourceId,
           brandName: brand?.name || e.sourceName || e.sourceId,
-          brandLogo: brand?.logo || '/img/mtm.jpg',
+          brandLogo: brand?.logo || '/img/mtm.png',
         };
       });
   }, [imageItems, sources]);

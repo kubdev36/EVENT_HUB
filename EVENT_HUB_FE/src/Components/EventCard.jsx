@@ -4,7 +4,7 @@ import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 export default function EventCard({ data, onOpenDetail }) {
-  const logoUrl = data?.logo || '/img/mtm.jpg';
+  const logoUrl = data?.logo || '/img/mtm.png';
 
   return (
     <div className="flex flex-col md:grid md:grid-cols-[160px_1fr_150px] bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs hover:border-slate-300 transition-all">
@@ -20,7 +20,7 @@ export default function EventCard({ data, onOpenDetail }) {
             alt={data.name}
             onError={(e) => {
               e.currentTarget.onerror = null;
-              e.currentTarget.src = '/img/mtm.jpg';
+              e.currentTarget.src = '/img/mtm.png';
             }}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-xs"
           />

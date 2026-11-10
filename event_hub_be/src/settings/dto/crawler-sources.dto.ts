@@ -140,7 +140,7 @@ export class CrawlerSourceItemDto {
   @IsIn(['web', 'facebook'])
   type?: 'web' | 'facebook';
 
-  @ApiProperty({ example: '/img/mtm.jpg', required: false })
+  @ApiProperty({ example: '/img/mtm.png', required: false })
   @IsOptional()
   @IsString()
   logo?: string;
