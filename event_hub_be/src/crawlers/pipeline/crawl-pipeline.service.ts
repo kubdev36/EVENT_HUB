@@ -17,6 +17,8 @@ import type {
   ExistingIndex,
   PreparedItem,
 } from '../persistence/event-upsert.service.js';
+import type { PendingSeen } from '../persistence/sitemap-seen.service.js';
+import { SitemapDiscoveryService } from './sitemap-discovery.service.js';
 
 /** Số trang chi tiết mặc định mỗi lần cào một nguồn. */
 const DEFAULT_DETAIL_BUDGET = 10;
@@ -25,6 +27,8 @@ export type FetchOutcome = {
   items: ParsedCrawlItem[];
   errors: CrawlFetchError[];
   attempts: number;
+  /** Link sitemap cần ghi là đã thấy, sau khi lưu sự kiện thành công. */
+  pendingSeen: PendingSeen[];
 };
 
 /** Loại engine cho một URL nguồn. */
@@ -45,6 +49,7 @@ export class CrawlPipeline {
     private readonly htmlEngine: GenericHtmlEngine,
     private readonly metaAdsEngine: GenericMetaAdsEngine,
     private readonly httpClient: CrawlerHttpClient,
+    private readonly sitemapDiscovery: SitemapDiscoveryService,
   ) {}
 
   /** Chọn engine theo dạng URL (giữ nguyên quy tắc cũ). */
@@ -66,6 +71,7 @@ export class CrawlPipeline {
   async fetch(target: CrawlTarget): Promise<FetchOutcome> {
     const items: ParsedCrawlItem[] = [];
     const errors: CrawlFetchError[] = [];
+    const pendingSeen: PendingSeen[] = [];
     let attempts = 0;
 
     const attempt = async (
@@ -112,7 +118,16 @@ export class CrawlPipeline {
       });
     }
 
-    return { items, errors, attempts };
+    // 3. Sitemap: chỉ trang mới xuất hiện so với các lần trước
+    for (const sitemap of target.sitemaps || []) {
+      await attempt(`sitemap:${sitemap.url}`, async () => {
+        const result = await this.sitemapDiscovery.discover(target, sitemap);
+        if (result.pendingSeen) pendingSeen.push(result.pendingSeen);
+        return result.items;
+      });
+    }
+
+    return { items, errors, attempts, pendingSeen };
   }
 
   /** Bỏ bài trùng URL trong lần cào, tiêu đề nhiễu và tiêu đề khớp bộ lọc của nguồn. */
@@ -184,6 +199,8 @@ export class CrawlPipeline {
 
     const needDetail = prepared
       .filter((p) => {
+        // Engine đã mở trang chi tiết (vd. trang mới từ sitemap): không tải lại.
+        if (p.item.detailFetched) return false;
         const needImage = !p.existing && !p.item.image;
         // Chỉ tin ngày do engine lấy từ dữ liệu có cấu trúc; ngày đoán từ tiêu đề không tính.
         const needDate =

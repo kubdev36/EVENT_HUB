@@ -26,6 +26,25 @@ export type CrawlSource = {
    * (chưa xem xong điều khoản của Meta).
    */
   storeImages?: boolean;
+  /** Sitemap để phát hiện trang mới (vd. landing page khuyến mãi). */
+  sitemaps?: SitemapConfig[];
+};
+
+/**
+ * Theo dõi một sitemap của nguồn: chỉ link mới xuất hiện (so với các lần trước) mới được mở.
+ * Lần đầu chỉ ghi lại link có sẵn, không tạo sự kiện. lastmod không dùng làm ngày đăng.
+ */
+export type SitemapConfig = {
+  /** Link sitemap (urlset) hoặc sitemap index. */
+  url: string;
+  /** Regex (không phân biệt hoa thường) áp lên pathname; chỉ link khớp mới được xét. */
+  includePattern: string;
+  /** Regex áp lên pathname; khớp thì bỏ (vd. tra-gop|chinh-sach). */
+  excludePattern?: string;
+  /** Với sitemap index: regex áp lên link file con, chỉ mở file khớp. */
+  childPattern?: string;
+  /** Số trang mới mở chi tiết mỗi lần, mặc định 10. */
+  maxNewPerRun?: number;
 };
 
 /**
@@ -80,4 +99,6 @@ export type ParsedCrawlItem = {
   eventTime?: string | null;
   score?: number;
   rawData?: Record<string, unknown> | null;
+  /** Engine đã tải trang chi tiết; bước crawl hai bước không tải lại. */
+  detailFetched?: boolean;
 };

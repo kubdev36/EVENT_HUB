@@ -7,6 +7,7 @@ import { Setting } from './settings/entity/setting.entity.js';
 import { AuditLog } from './audit/audit-log.entity.js';
 import { RefreshToken } from './auth/refresh-token.entity.js';
 import { NotificationOutbox } from './notifications/notification-outbox.entity.js';
+import { SitemapSeenUrl } from './crawlers/entity/sitemap-seen-url.entity.js';
 import { migrations } from './migrations/index.js';
 
 dotenv.config();
@@ -28,6 +29,7 @@ export const AppDataSource = new DataSource({
     AuditLog,
     RefreshToken,
     NotificationOutbox,
+    SitemapSeenUrl,
   ],
   migrations,
   subscribers: [],

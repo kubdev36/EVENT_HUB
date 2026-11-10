@@ -282,6 +282,13 @@ export class SettingsService {
       ...(typeof item.storeImages === 'boolean'
         ? { storeImages: item.storeImages }
         : {}),
+      ...(Array.isArray(item.sitemaps)
+        ? {
+            sitemaps: item.sitemaps.filter(isObject) as NonNullable<
+              CrawlSource['sitemaps']
+            >,
+          }
+        : {}),
     } satisfies CrawlSource;
   }
 

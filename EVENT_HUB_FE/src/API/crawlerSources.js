@@ -30,6 +30,7 @@ export function cleanTarget(c) {
     ...(c.ajaxPayload ? { ajaxPayload: c.ajaxPayload } : {}),
     ...(c.minRequestIntervalMs !== undefined ? { minRequestIntervalMs: c.minRequestIntervalMs } : {}),
     ...(typeof c.storeImages === 'boolean' ? { storeImages: c.storeImages } : {}),
+    ...(Array.isArray(c.sitemaps) ? { sitemaps: c.sitemaps } : {}),
   };
 }
 

@@ -126,6 +126,45 @@ export class ApiSourceConfigDto {
   maxPages?: number;
 }
 
+/** Sitemap theo dõi trang mới của nguồn (xem SitemapConfig trong crawler.types.ts). */
+export class SitemapConfigDto {
+  @ApiProperty({ example: 'https://hoanghamobile.com/sitemap.xml' })
+  @IsUrl({ protocols: ['https', 'http'], require_protocol: true })
+  @MaxLength(2048)
+  url: string;
+
+  @ApiProperty({
+    example: 'sale|uu-dai|deal|khuyen-mai|giam-gia',
+    description: 'Regex trên pathname; chỉ link khớp mới được xét',
+  })
+  @IsString()
+  @MaxLength(500)
+  includePattern: string;
+
+  @ApiProperty({ required: false, example: 'tra-gop|chinh-sach' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  excludePattern?: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'page-sitemap',
+    description: 'Với sitemap index: chỉ mở file con khớp regex này',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  childPattern?: string;
+
+  @ApiProperty({ required: false, example: 10 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  maxNewPerRun?: number;
+}
+
 export class CrawlerSourceItemDto {
   @ApiProperty({ example: 'cellphones' })
   @IsString()
@@ -201,6 +240,14 @@ export class CrawlerSourceItemDto {
   @IsOptional()
   @IsBoolean()
   storeImages?: boolean;
+
+  @ApiProperty({ type: [SitemapConfigDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => SitemapConfigDto)
+  sitemaps?: SitemapConfigDto[];
 }
 
 export class SaveCrawlerSourcesDto {
