@@ -311,7 +311,7 @@ describe('CrawlerService', () => {
       expect(sendMessage).toHaveBeenCalledTimes(1);
     });
 
-    it('cào xong một nguồn thì gửi Telegram ngay cho bài mới', async () => {
+    it('lượt cào không tự gửi Telegram; bài mới nằm chờ và lượt gửi định kỳ gửi đi', async () => {
       const url = 'https://shop.vn/feed';
       const sendMessage = jest.fn(async () => ({ ok: true }));
       const { service, eventRepo } = build({
@@ -320,7 +320,9 @@ describe('CrawlerService', () => {
         },
         telegram: { sendMessage },
       });
-      await service.crawlSource(source([url]));
+      await service.crawlTarget(source([url]));
+      expect(sendMessage).not.toHaveBeenCalled();
+      await service.notifyPendingEvents(0);
       expect(sendMessage).toHaveBeenCalledTimes(1);
       expect(eventRepo.rows[0].notifiedAt).toBeInstanceOf(Date);
     });

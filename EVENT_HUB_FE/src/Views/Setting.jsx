@@ -11,21 +11,20 @@ function formatLastRun(run) {
   return `${when} · ${RUN_STATUS[run.status] || run.status}`;
 }
 
-/** Sau khi xếp hàng cào, tải lại "lần cào cuối" mỗi 5 giây trong 3 phút để thấy kết quả. */
-const WATCH_MS = 3 * 60 * 1000;
-/** Thông báo sau khi xếp hàng: nguồn nào đã vào hàng đợi, nguồn nào đã có việc chờ sẵn. */
-function describeQueued(data, nameOf) {
-  const queued = (data?.queued ?? []).map(nameOf);
-  const already = (data?.alreadyQueued ?? []).map(nameOf);
-  const parts = [];
-  if (queued.length) parts.push(`Đã xếp hàng cào: ${queued.join(', ')}.`);
-  if (already.length) parts.push(`Đang chờ cào sẵn: ${already.join(', ')}.`);
-  parts.push('Kết quả sẽ hiện ở dòng "lần cào cuối" của từng nguồn.');
-  return parts.join(' ');
-}
+/** Theo dõi tiến độ cào tối đa 10 phút sau lần bấm cuối (tải lại mỗi 5 giây). */
+const WATCH_MS = 10 * 60 * 1000;
+/** Danh sách nguồn của lần bấm cào kèm trạng thái, từ lượt cào gần nhất của từng nguồn. */
+const progressItems = (job, runRows, nameOf) =>
+  Object.entries(job?.since ?? {}).map(([id, since]) => ({
+    id,
+    name: nameOf(id),
+    progress: sourceProgress(since, runRows?.find((r) => r.sourceId === id)),
+  }));
 
 // Tabs
 import CrawlerTab from './Settings/tabs/CrawlerTab';
+import CrawlProgress from './Settings/CrawlProgress';
+import { sourceProgress, summarizeProgress } from './Settings/crawlProgressState';
 import UsersTab from './Settings/tabs/UsersTab';
 import TelegramTab from './Settings/tabs/TelegramTab';
 import KeywordsTab from './Settings/tabs/KeywordsTab';
@@ -50,13 +49,17 @@ const telegramPayload = (c) => ({
 
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
-  // Lần cào gần nhất của từng nguồn (hiển thị trên thẻ crawler).
-  // Theo dõi kết quả sau khi xếp hàng cào (worker chạy nền).
-  const [watchUntil, setWatchUntil] = useState(0);
+  // Lần bấm cào đang theo dõi: { since: { [sourceId]: thời điểm xếp hàng theo giờ server }, until }.
+  const [crawlJob, setCrawlJob] = useState(null);
+  // Lần cào gần nhất của từng nguồn (dòng "lần cào cuối" và bảng tiến độ).
   const runs = useQuery({
     queryKey: ['dash', 'summary', 'setting-runs'],
     queryFn: () => dashboardApi.summary({}).then((r) => r.data.sources),
-    refetchInterval: () => (Date.now() < watchUntil ? 5000 : false),
+    refetchInterval: (query) => {
+      if (!crawlJob || Date.now() > crawlJob.until) return false;
+      const done = summarizeProgress(progressItems(crawlJob, query.state.data, (id) => id)).allDone;
+      return done ? false : 5000;
+    },
   });
 
   // Data states
@@ -145,19 +148,28 @@ export default function Setting() {
 
   // Crawl execution
   const nameOf = (id) => crawlers.find((c) => c.id === id)?.name || id;
-  const watchResults = () => {
-    setWatchUntil(Date.now() + WATCH_MS);
+  const crawlItems = progressItems(crawlJob, runs.data, nameOf);
+  const crawlJobDone = summarizeProgress(crawlItems).allDone;
+  /** Thêm các nguồn vừa xếp hàng (kể cả nguồn đã có việc chờ) vào bảng tiến độ. */
+  const trackCrawl = (data) => {
+    const ids = [...(data?.queued ?? []), ...(data?.alreadyQueued ?? [])];
+    if (!ids.length) return;
+    const at = data.at || new Date().toISOString();
+    setCrawlJob((prev) => {
+      // Lần bấm mới khi bảng cũ đã xong thì bắt đầu bảng mới; đang chạy thì gộp thêm nguồn.
+      const keep = prev && !crawlJobDone ? prev.since : {};
+      return { since: { ...keep, ...Object.fromEntries(ids.map((id) => [id, at])) }, until: Date.now() + WATCH_MS };
+    });
     runs.refetch();
   };
 
-  // "Cào ngay": xếp hàng một nguồn; worker cào nền, kết quả hiện ở dòng "lần cào cuối".
+  // "Cào ngay": xếp hàng một nguồn; worker cào nền, tiến độ hiện ở bảng phía trên.
   const runCrawl = async (crawler) => {
     if (!crawler || runningId) return;
     setRunningId(crawler.id);
     try {
       const response = await settingsApi.runCrawlerById(crawler.id);
-      setStatusMessage(describeQueued(response.data, nameOf));
-      watchResults();
+      trackCrawl(response.data);
     } catch (err) {
       setStatusMessage(err.response?.data?.message || `Xếp hàng cào ${crawler.name} thất bại.`);
     } finally {
@@ -169,8 +181,7 @@ export default function Setting() {
     setCrawlLoading(true);
     try {
       const response = await settingsApi.runAllCrawlers();
-      setStatusMessage(describeQueued(response.data, nameOf));
-      watchResults();
+      trackCrawl(response.data);
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Cào tất cả thất bại.');
     } finally {
@@ -455,6 +466,10 @@ export default function Setting() {
               <X size={14} />
             </button>
           </div>
+        )}
+
+        {activeTab === 'crawler' && crawlJob && (
+          <CrawlProgress items={crawlItems} onClose={() => setCrawlJob(null)} />
         )}
 
         {activeTab === 'crawler' && (

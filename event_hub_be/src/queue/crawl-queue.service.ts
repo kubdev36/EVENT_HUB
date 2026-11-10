@@ -25,7 +25,12 @@ export const QUEUE_OPTIONS = {
 };
 
 type CrawlJob = { sourceId: string };
-export type EnqueueResult = { queued: string[]; alreadyQueued: string[] };
+/** at: thời điểm xếp hàng theo giờ server, để giao diện biết lượt cào nào bắt đầu sau lần bấm. */
+export type EnqueueResult = {
+  queued: string[];
+  alreadyQueued: string[];
+  at: string;
+};
 
 /**
  * Hàng đợi crawl bằng pg-boss (lưu trong Postgres, schema "pgboss", không cần dịch vụ thêm).
@@ -93,7 +98,11 @@ export class CrawlQueueService implements OnModuleInit, OnApplicationShutdown {
   /** Đẩy việc cào cho các nguồn. Nguồn đã có việc đang chờ thì không thêm việc trùng. */
   async enqueue(sourceIds: string[]): Promise<EnqueueResult> {
     await this.started;
-    const result: EnqueueResult = { queued: [], alreadyQueued: [] };
+    const result: EnqueueResult = {
+      queued: [],
+      alreadyQueued: [],
+      at: new Date().toISOString(),
+    };
     for (const sourceId of sourceIds) {
       const id = await this.boss.send(
         CRAWL_QUEUE,

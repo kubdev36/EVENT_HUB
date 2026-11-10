@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { ImageStoreService } from '../../images/image-store.service.js';
 import { EventNotifierService } from '../../notifications/event-notifier.service.js';
-import { CrawlSource, CrawlTarget } from '../crawler.types.js';
+import { CrawlTarget } from '../crawler.types.js';
 import { CrawlerRun, CrawlerRunStatus } from '../entity/crawler-run.entity.js';
 import { CrawlerHttpClient } from '../engine/crawler-http.client.js';
 import { isDue, mapWithConcurrency } from '../helpers/schedule.helper.js';
@@ -76,20 +76,12 @@ export class CrawlerService implements OnApplicationBootstrap {
     return result.affected ?? 0;
   }
 
-  /** Gửi Telegram cho bài chưa thông báo (cron gọi định kỳ). */
+  /**
+   * Gửi Telegram cho bài chưa thông báo. Cron của worker gọi mỗi phút; lượt cào không tự gửi
+   * (bài mới đã nằm trong outbox), để việc cào xong ngay mà không phải chờ gửi tin.
+   */
   notifyPendingEvents(pauseMs?: number) {
     return this.notifier.notifyPendingEvents(pauseMs);
-  }
-
-  /** Gửi thông báo ngay sau khi cào; lỗi chỉ ghi log, không làm hỏng kết quả cào. */
-  private async notifyAfterCrawl() {
-    try {
-      await this.notifier.notifyPendingEvents();
-    } catch (err) {
-      this.logger.warn(
-        `Gửi Telegram sau khi cào lỗi: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
   }
 
   /** Bấm "Cào tất cả": cào mọi nguồn đang bật, không xét hạn. */
@@ -129,13 +121,9 @@ export class CrawlerService implements OnApplicationBootstrap {
   }
 
   private async crawlMany(targets: CrawlTarget[]): Promise<CrawlResult[]> {
-    const results = await mapWithConcurrency(
-      targets,
-      MAX_PARALLEL_SOURCES,
-      (t) => this.crawlTargetSafely(t),
+    return mapWithConcurrency(targets, MAX_PARALLEL_SOURCES, (t) =>
+      this.crawlTargetSafely(t),
     );
-    await this.notifyAfterCrawl();
-    return results;
   }
 
   /** Thời điểm bắt đầu lần cào gần nhất của từng nguồn (một truy vấn). */
@@ -159,17 +147,8 @@ export class CrawlerService implements OnApplicationBootstrap {
     });
   }
 
-  async crawlSource(source: CrawlSource) {
-    const result = await this.crawlTarget(source);
-    await this.notifyAfterCrawl();
-    return result;
-  }
-
   async crawlTargetById(id: string) {
-    const target = await this.sources.getTargetById(id);
-    const result = await this.crawlTarget(target);
-    await this.notifyAfterCrawl();
-    return result;
+    return this.crawlTarget(await this.sources.getTargetById(id));
   }
 
   /** Cào một nguồn. Nếu nguồn đang được cào ở nơi khác thì bỏ qua (status = skipped). */

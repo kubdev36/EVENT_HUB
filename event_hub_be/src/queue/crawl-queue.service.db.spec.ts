@@ -62,8 +62,9 @@ d('CrawlQueueService (Postgres + pg-boss)', () => {
     await api.onModuleInit();
     const first = await api.enqueue(['tgdd', 'fpt']);
     const again = await api.enqueue(['tgdd']);
-    expect(first).toEqual({ queued: ['tgdd', 'fpt'], alreadyQueued: [] });
-    expect(again).toEqual({ queued: [], alreadyQueued: ['tgdd'] });
+    expect(first).toMatchObject({ queued: ['tgdd', 'fpt'], alreadyQueued: [] });
+    expect(Date.parse(first.at)).not.toBeNaN();
+    expect(again).toMatchObject({ queued: [], alreadyQueued: ['tgdd'] });
     await new Promise((r) => setTimeout(r, 2500));
     expect(crawl).not.toHaveBeenCalled();
   });
