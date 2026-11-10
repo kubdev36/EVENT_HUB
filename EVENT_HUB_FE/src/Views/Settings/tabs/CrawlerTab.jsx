@@ -1,5 +1,4 @@
-import React from 'react';
-import { Bot, Plus, Play, Loader2, Edit2, Trash2, Clock } from 'lucide-react';
+import { Plus, Play, Loader2, Edit2, Trash2, Clock } from 'lucide-react';
 
 export default function CrawlerTab({
   crawlers = [],

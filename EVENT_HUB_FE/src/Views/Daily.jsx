@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, Plus } from 'lucide-react';
 import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
@@ -6,7 +6,7 @@ import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
 import { useRangeEvents } from '../API/useDashboardEvents';
 
-import { useFilterContext } from '../context/FilterContext';
+import { useFilterContext } from '../context/useFilterContext';
 
 export default function Daily() {
   const [selectedDate, setSelectedDate] = useState(new Date());

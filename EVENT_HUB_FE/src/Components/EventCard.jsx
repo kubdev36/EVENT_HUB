@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock, ChevronRight } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';

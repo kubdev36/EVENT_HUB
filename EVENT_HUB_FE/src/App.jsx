@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import Layout from './Layout/Layout';
 import Login from './Views/Login';
 import { authApi, clearStoredAuth } from './API/API';
@@ -122,12 +122,6 @@ export default function App() {
     }
   }, [isAuthed]);
 
-  useEffect(() => {
-    if (isAuthed && !canAccessView(user, currentView)) {
-      navigate('overview');
-    }
-  }, [currentView, isAdmin, isAuthed, user]);
-
   const navigate = (view) => {
     if (!canAccessView(user, view)) {
       view = 'overview';
@@ -138,6 +132,15 @@ export default function App() {
     localStorage.setItem(VIEW_KEY, view);
     window.history.pushState({}, '', path);
   };
+
+  // Trang không có quyền xem thì hiện Tổng quan (tính khi render, không đặt state trong effect).
+  const view = isAuthed && !canAccessView(user, currentView) ? 'overview' : currentView;
+  // Đồng bộ địa chỉ trên thanh URL và trang đã lưu (hệ thống bên ngoài React).
+  useEffect(() => {
+    if (view === currentView) return;
+    window.history.replaceState({}, '', VIEW_TO_PATH.overview || '/overview');
+    localStorage.setItem(VIEW_KEY, 'overview');
+  }, [view, currentView]);
 
   const handleLogin = (nextUser) => {
     localStorage.setItem(AUTH_KEY, 'true');
@@ -161,7 +164,7 @@ export default function App() {
   };
 
   const renderView = useMemo(() => {
-    switch (currentView) {
+    switch (view) {
       case 'daily':
         return <Daily />;
       case 'month':
@@ -183,13 +186,13 @@ export default function App() {
       case 'setting':
         return isAdmin ? <Setting /> : <OverView />;
       default:
-        if (currentView.startsWith('dept-')) {
-          const dept = currentView.replace('dept-', '');
+        if (view.startsWith('dept-')) {
+          const dept = view.replace('dept-', '');
           return <DepartmentView departmentCode={dept} />;
         }
         return <OverView />;
     }
-  }, [currentView, isAdmin]);
+  }, [view, isAdmin]);
 
   if (!isAuthed) {
     return <Login onLogin={handleLogin} />;
@@ -197,7 +200,7 @@ export default function App() {
 
   return (
     <Layout
-      currentView={currentView}
+      currentView={view}
       onNavigate={navigate}
       onLogout={handleLogout}
       user={user}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { LogOut, Menu } from 'lucide-react';
 import Sidebar from '../Components/Sidebar';
 

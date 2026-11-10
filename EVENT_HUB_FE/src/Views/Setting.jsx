@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bot, Users, Send, Sliders, Building2, ScrollText, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi, settingsApi, toCrawlerList, usersApi } from '../API/API';

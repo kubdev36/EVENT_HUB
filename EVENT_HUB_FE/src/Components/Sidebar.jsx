@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Home,
   Calendar,
@@ -22,7 +22,7 @@ import CrawlerModal from '../Views/Settings/modals/CrawlerModal';
 
 const EMPTY_CRAWLER_FORM = { name: '', logo: '', interval: '6h', targetUrls: [''] };
 import { normalizeDepartment } from '../utils/helpers';
-import { useFilterContext } from '../context/FilterContext';
+import { useFilterContext } from '../context/useFilterContext';
 
 const BASE_MENU_TOP = [
   { id: 'overview', label: 'Tổng quan', icon: Home },

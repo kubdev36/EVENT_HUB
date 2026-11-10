@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Upload, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 
