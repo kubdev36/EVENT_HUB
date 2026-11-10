@@ -261,3 +261,32 @@ describe('Cấu hình không khớp', () => {
     ).toBe(false);
   });
 });
+
+describe('Ngày đăng đúng nửa đêm giờ Việt Nam là ngày không có giờ', () => {
+  it('FPT Shop ghi datePublished "T17:00:00+00:00" (00:00 VN): giữ ngày 07/11, bỏ giờ', () => {
+    const d = ArticleDetailHelper.parse(
+      fixture('fptshop-article-midnight.html'),
+      'https://fptshop.com.vn/tin-tuc/danh-gia/danh-gia-dji-mini-3-212676',
+    );
+    expect(
+      d.published && DateExtractorHelper.vnParts(d.published.date),
+    ).toEqual({
+      year: 2026,
+      month: 11,
+      day: 7,
+    });
+    expect(d.published?.time).toBeNull();
+  });
+
+  it('giờ thật (13:53, có giây khác 0 hoặc giờ khác 0) được giữ nguyên', () => {
+    const at = (iso: string) =>
+      DateExtractorHelper.withoutMidnightTime(
+        DateExtractorHelper.parsePublishedDate(iso),
+      )?.time;
+    expect(at('2026-11-06T13:53:15+07:00')).toBe('13:53');
+    expect(at('2026-11-06T17:00:05+00:00')).toBe('00:00');
+    expect(at('Mon, 09 Nov 2026 21:28:50 +0000')).toBe('04:28');
+    expect(at('2026-11-06T00:00:00+07:00')).toBeNull();
+    expect(at('Fri, 06 Nov 2026 17:00:00 +0000')).toBeNull();
+  });
+});

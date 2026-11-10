@@ -47,16 +47,12 @@ export class ArticleDetailHelper {
     };
   }
 
-  /** "2026-11-06T00:00:00+07:00" là ngày không có giờ thật: trả time = null. */
+  /** Nửa đêm giờ Việt Nam (vd. "...T00:00:00+07:00", "...T17:00:00+00:00") là ngày không có giờ thật. */
   private static parseDate(text: string | null): ParsedDate | null {
     if (!text) return null;
-    const parsed = DateExtractorHelper.parsePublishedDate(text);
-    if (!parsed) return null;
-    if (/T00:00(:00)?(\.0+)?(\+07:00)?$/.test(text.trim())) {
-      const { year, month, day } = DateExtractorHelper.vnParts(parsed.date);
-      return DateExtractorHelper.dateOnly(year, month, day);
-    }
-    return parsed;
+    return DateExtractorHelper.withoutMidnightTime(
+      DateExtractorHelper.parsePublishedDate(text),
+    );
   }
 
   private static findArticleJsonLd(
