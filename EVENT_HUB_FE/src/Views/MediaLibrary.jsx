@@ -12,18 +12,24 @@ import {
 } from 'lucide-react';
 import { eventImage, useImageEvents, useSources } from '../API/useDashboardEvents';
 import { addDays, vnToday } from './dashboard/shared';
+import DateRangeFilter from './media/DateRangeFilter';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 
 export default function MediaLibrary() {
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  /** Khoảng ngày lọc ở server ({ from, to } theo lịch Việt Nam); null = tất cả (400 ngày gần nhất). */
+  const [dateRange, setDateRange] = useState(null);
   const [activeIndex, setActiveIndex] = useState(null);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const { sources } = useSources();
-  // Ảnh trong 400 ngày gần nhất, mới nhất trước, tải thêm theo trang.
+  // Ảnh trong khoảng ngày đã chọn (mặc định 400 ngày gần nhất), mới nhất trước, tải thêm theo trang.
   const today = vnToday();
-  const images = useImageEvents({ from: addDays(today, -399), to: today });
+  const images = useImageEvents({
+    from: dateRange?.from ?? addDays(today, -399),
+    to: dateRange?.to ?? today,
+  });
   const imageItems = useMemo(() => (images.data?.pages ?? []).flatMap((p) => p.items), [images.data]);
 
   const allPhotos = useMemo(() => {
@@ -119,7 +125,8 @@ export default function MediaLibrary() {
             <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Kho lưu trữ hình ảnh và banner chiến dịch của toàn bộ hệ thống</p>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <DateRangeFilter value={dateRange} onChange={setDateRange} today={today} />
             <div className="relative flex-1 sm:w-60 sm:flex-initial lg:w-72">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
