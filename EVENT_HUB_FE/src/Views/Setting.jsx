@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot, Users, Send, Sliders, Building2, ScrollText, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi, settingsApi, toCrawlerList, usersApi } from '../API/API';
+import { addCrawlerSource, saveCrawlerList } from '../API/crawlerSources';
 
 const RUN_STATUS = { success: 'thành công', partial: 'lỗi một phần', blocked: 'bị chặn', failed: 'lỗi', running: 'đang chạy' };
 /** "07/11 10:45 · thành công" từ lần cào gần nhất của nguồn. */
@@ -78,6 +79,7 @@ export default function Setting() {
   const [runningId, setRunningId] = useState(null);
 
   // Modal control states
+  const [modalError, setModalError] = useState('');
   const [modalMode, setModalMode] = useState(null); // 'add-crawler'|'edit-crawler'|'delete-crawler'|'add-user'|'edit-user'|'delete-user'|'reset-pass'|'edit-keyword'|'add-department'|'edit-department'|'delete-department'
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({});
@@ -194,23 +196,7 @@ export default function Setting() {
     setCrawlers(updatedCrawlers);
     setSettingsSaving(true);
     try {
-      const cleanTargets = updatedCrawlers.map((c) => ({
-        id: c.id,
-        name: c.name,
-        logo: c.logo || null,
-        enabled: c.enabled,
-        interval: c.interval || '6h',
-        targetUrls: c.targetUrls || [],
-        // Giữ cấu hình trích xuất/API của nguồn, nếu không lưu từ giao diện sẽ xóa mất.
-        ...(c.type ? { type: c.type } : {}),
-        ...(c.extract ? { extract: c.extract } : {}),
-        ...(c.api ? { api: c.api } : {}),
-        ...(c.ajaxEndpoint ? { ajaxEndpoint: c.ajaxEndpoint } : {}),
-        ...(c.ajaxPayload ? { ajaxPayload: c.ajaxPayload } : {}),
-        ...(c.minRequestIntervalMs !== undefined ? { minRequestIntervalMs: c.minRequestIntervalMs } : {}),
-        ...(typeof c.storeImages === 'boolean' ? { storeImages: c.storeImages } : {}),
-      }));
-      await settingsApi.saveCrawlers({ targets: cleanTargets });
+      await saveCrawlerList(updatedCrawlers);
       setStatusMessage('Đã lưu cấu hình Crawler thành công.');
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Lưu cấu hình Crawler thất bại.');
@@ -280,6 +266,7 @@ export default function Setting() {
 
   // Open & Close Modal
   const handleOpenModal = (mode, item = null) => {
+    setModalError('');
     setModalMode(mode);
     setSelectedItem(item);
     if (item) {
@@ -297,6 +284,7 @@ export default function Setting() {
   };
 
   const handleCloseModal = () => {
+    setModalError('');
     setModalMode(null);
     setSelectedItem(null);
     setFormData({});
@@ -305,23 +293,19 @@ export default function Setting() {
   // Modal Save actions
   const handleSaveModal = async () => {
     setSettingsSaving(true);
+    // Lỗi kiểm tra dữ liệu (vd. trùng mã nguồn) thì giữ popup mở để người dùng sửa.
+    let keepOpen = false;
     try {
       if (modalMode === 'add-crawler') {
-        const newId = (formData.name || 'crawler').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const newCrawler = {
-          id: newId || Date.now().toString(),
-          name: formData.name || 'Đối thủ mới',
-          logo: formData.logo || '/img/mtm.jpg',
-          enabled: true,
-          interval: formData.interval || '6h',
-          lastRun: 'Chưa chạy',
-          targetUrls: formData.targetUrls?.filter((u) => u.trim() !== '') || [],
-          ...(formData.extract ? { extract: formData.extract } : {}),
-          ...(formData.api ? { api: formData.api } : {}),
-          events: [],
-        };
-        const updated = [...crawlers, newCrawler];
-        await handleSaveCrawlersList(updated);
+        // Dùng chung với nút "Thêm đối thủ" ở thanh bên: đọc danh sách mới nhất, kiểm tra trùng mã rồi lưu.
+        try {
+          setCrawlers(await addCrawlerSource(formData));
+          setStatusMessage('Đã thêm đối thủ.');
+        } catch (err) {
+          setModalError(err.response?.data?.message || err.message);
+          keepOpen = true;
+          return;
+        }
       } else if (modalMode === 'edit-crawler') {
         const cleanForm = { ...formData };
         delete cleanForm.advancedError;
@@ -414,7 +398,7 @@ export default function Setting() {
       setStatusMessage(err.response?.data?.message || 'Thao tác thất bại.');
     } finally {
       setSettingsSaving(false);
-      handleCloseModal();
+      if (!keepOpen) handleCloseModal();
     }
   };
 
@@ -539,6 +523,7 @@ export default function Setting() {
         onClose={handleCloseModal}
         onSave={handleSaveModal}
         saving={settingsSaving}
+        error={modalError}
       />
 
       <UserModal

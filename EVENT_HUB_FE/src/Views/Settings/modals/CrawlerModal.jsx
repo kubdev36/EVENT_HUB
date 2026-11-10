@@ -74,6 +74,7 @@ export default function CrawlerModal({
   onClose,
   onSave,
   saving = false,
+  error = '',
 }) {
   if (!isOpen) return null;
 
@@ -224,6 +225,12 @@ export default function CrawlerModal({
           </div>
 
           <AdvancedConfigField formData={formData} setFormData={setFormData} />
+
+          {error && (
+            <p role="alert" className="text-rose-600 text-[11px] font-medium">
+              {error}
+            </p>
+          )}
 
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <button
