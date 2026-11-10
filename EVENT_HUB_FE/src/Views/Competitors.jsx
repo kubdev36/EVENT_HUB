@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, RefreshCw, Loader2, Clock } from 'lucide-react';
+import { Search, Plus, Clock } from 'lucide-react';
 import Calendar from '../Components/Calendar';
 import EventCard from '../Components/EventCard';
 import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
 import { useRangeEvents } from '../API/useDashboardEvents';
-import { settingsApi } from '../API/API';
 
 const COMPETITOR_TYPES = ['promo', 'ads', 'live', 'release', 'sale', 'other'];
 
@@ -14,27 +13,9 @@ export default function Competitor() {
   const [selectedCompetitor, setSelectedCompetitor] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [crawlLoading, setCrawlLoading] = useState(false);
-  const [crawlMessage, setCrawlMessage] = useState('');
 
   const dateStr = selectedDate.toLocaleDateString('en-CA');
   const { sources, refetch } = useRangeEvents(dateStr, dateStr, { includeOwn: false });
-
-  const handleCrawlAll = async () => {
-    setCrawlLoading(true);
-    setCrawlMessage('');
-    try {
-      await settingsApi.runAllCrawlers();
-      await refetch?.();
-      setCrawlMessage('Đã cào dữ liệu mới nhất thành công!');
-      setTimeout(() => setCrawlMessage(''), 4000);
-    } catch {
-      setCrawlMessage('Có lỗi khi cào dữ liệu đối thủ');
-      setTimeout(() => setCrawlMessage(''), 4000);
-    } finally {
-      setCrawlLoading(false);
-    }
-  };
 
   const displayCompetitors = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -87,24 +68,6 @@ export default function Competitor() {
               />
             </div>
             <button
-              onClick={handleCrawlAll}
-              disabled={crawlLoading}
-              className="h-9 px-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer shrink-0 disabled:opacity-50"
-              title="Cào ngay toàn bộ các trang đối thủ"
-            >
-              {crawlLoading ? (
-                <>
-                  <Loader2 size={14} className="animate-spin text-blue-600" />
-                  <span>Đang cào tất cả...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw size={14} className="text-blue-600" />
-                  <span>Cào tất cả</span>
-                </>
-              )}
-            </button>
-            <button
               onClick={() => setShowAddModal(true)}
               className="h-9 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer shrink-0"
             >
@@ -113,12 +76,6 @@ export default function Competitor() {
             </button>
           </div>
         </div>
-
-        {crawlMessage && (
-          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between animate-in fade-in duration-200">
-            <span>{crawlMessage}</span>
-          </div>
-        )}
 
         <Calendar
           selectedDate={selectedDate}
