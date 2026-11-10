@@ -20,10 +20,14 @@ export function clearStoredAuth() {
   localStorage.removeItem('event-hub-auth');
 }
 
-/** Hết phiên hẳn: xóa thông tin đăng nhập, về trang đăng nhập (trừ khi đang ở đó, tránh tải lại vô hạn). */
+/**
+ * Hết phiên hẳn: xóa thông tin đăng nhập rồi tải lại đúng trang đang xem. App thấy chưa đăng nhập nên hiện
+ * trang đăng nhập; đăng nhập xong quay lại trang đó. Chỉ tải lại khi trước đó đang đăng nhập (không lặp vô hạn).
+ */
 function endSession() {
+  const wasAuthed = localStorage.getItem('event-hub-auth') === 'true';
   clearStoredAuth();
-  if (window.location.pathname !== '/') window.location.href = '/';
+  if (wasAuthed) window.location.reload();
 }
 
 // Access token sống 15 phút. Gặp 401 thì làm mới bằng refresh token (cookie httpOnly) rồi gửi lại

@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import Layout from './Layout/Layout';
 import Login from './Views/Login';
+import ErrorBoundary from './Components/ErrorBoundary';
 import { authApi, clearStoredAuth } from './API/API';
+import { VIEW_PATHS, canAccessView, pathToView, viewToPath } from './routes';
 
 const Daily = lazy(() => import('./Views/Daily'));
 const Month = lazy(() => import('./Views/Month'));
@@ -12,48 +15,24 @@ const MediaLibrary = lazy(() => import('./Views/MediaLibrary'));
 const Reports = lazy(() => import('./Views/Reports'));
 const Setting = lazy(() => import('./Views/Setting'));
 
-import { normalizeDepartment } from './utils/helpers';
-
 const AUTH_KEY = 'event-hub-auth';
 const USER_KEY = 'user';
+/** Trang mở gần nhất, để vào "/" thì quay lại đúng trang đó. */
 const VIEW_KEY = 'event-hub-view';
-const VIEW_PATHS = {
-  '/overview': 'overview',
-  '/month': 'month',
-  '/daily': 'daily',
-  '/marketing': 'marketing',
-  '/sale': 'sale',
-  '/competitors': 'competitors',
-  '/private-events': 'private-events',
-  '/media-library': 'media-library',
-  '/reports': 'reports',
-  '/setting': 'setting',
+
+/** Nội dung của từng trang cố định. */
+const PAGES = {
+  overview: <OverView />,
+  month: <Month />,
+  daily: <Daily />,
+  marketing: <DepartmentView departmentCode="mkt" />,
+  sale: <DepartmentView departmentCode="kinh_doanh" />,
+  competitors: <Competitors />,
+  'private-events': <DepartmentView departmentCode="internal" />,
+  'media-library': <MediaLibrary />,
+  reports: <Reports />,
+  setting: <Setting />,
 };
-
-const VIEW_TO_PATH = Object.fromEntries(
-  Object.entries(VIEW_PATHS).map(([path, view]) => [view, path])
-);
-
-const VIEW_DEPARTMENTS = {
-  marketing: 'mkt',
-  sale: 'kinh_doanh',
-  'private-events': 'internal',
-};
-
-function canAccessView(user, view) {
-  if (user?.role === 'admin') return true;
-  if (view === 'setting') return false;
-
-  if (view.startsWith('dept-')) {
-    const deptCode = view.replace('dept-', '');
-    return normalizeDepartment(user?.department) === normalizeDepartment(deptCode);
-  }
-
-  const requiredDepartment = VIEW_DEPARTMENTS[view];
-  if (!requiredDepartment) return true;
-
-  return normalizeDepartment(user?.department) === requiredDepartment;
-}
 
 function getInitialAuth() {
   // Token cũ trong localStorage (trước khi chuyển sang cookie httpOnly) không dùng nữa: xóa đi.
@@ -70,29 +49,33 @@ function getInitialUser() {
   }
 }
 
-function getViewFromLocation() {
-  const path = window.location.pathname;
-  if (path.startsWith('/department/')) {
-    const code = path.replace('/department/', '');
-    return `dept-${code}`;
-  }
-  return VIEW_PATHS[path] || localStorage.getItem(VIEW_KEY) || 'overview';
+/** Chặn trang không có quyền xem: chuyển về Tổng quan. */
+function Guard({ user, view, children }) {
+  return canAccessView(user, view) ? children : <Navigate to={VIEW_PATHS.overview} replace />;
+}
+
+/** Trang phòng ban động "/department/:code". */
+function DepartmentRoute({ user }) {
+  const { code } = useParams();
+  return (
+    <Guard user={user} view={`dept-${code}`}>
+      <DepartmentView departmentCode={code} />
+    </Guard>
+  );
+}
+
+/** "/" -> trang mở gần nhất (nếu còn quyền xem), không thì Tổng quan. */
+function homePath(user) {
+  const saved = localStorage.getItem(VIEW_KEY);
+  return saved && canAccessView(user, saved) ? viewToPath(saved) : VIEW_PATHS.overview;
 }
 
 export default function App() {
   const [isAuthed, setIsAuthed] = useState(getInitialAuth);
   const [user, setUser] = useState(getInitialUser);
-  const [currentView, setCurrentView] = useState(getViewFromLocation);
-  const isAdmin = user?.role === 'admin';
-
-  useEffect(() => {
-    const onPopState = () => {
-      setCurrentView(getViewFromLocation());
-    };
-
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const view = pathToView(location.pathname);
 
   // Kiểm tra cookie phiên còn hợp lệ khi mở app; hết hạn hoặc chưa có thì về trang đăng nhập.
   useEffect(() => {
@@ -116,31 +99,10 @@ export default function App() {
     };
   }, [isAuthed]);
 
+  // Nhớ trang đang xem (hệ thống ngoài React).
   useEffect(() => {
-    if (!isAuthed && window.location.pathname !== '/') {
-      window.history.replaceState({}, '', '/');
-    }
-  }, [isAuthed]);
-
-  const navigate = (view) => {
-    if (!canAccessView(user, view)) {
-      view = 'overview';
-    }
-
-    const path = VIEW_TO_PATH[view] || (view.startsWith('dept-') ? `/department/${view.replace('dept-', '')}` : '/overview');
-    setCurrentView(view);
-    localStorage.setItem(VIEW_KEY, view);
-    window.history.pushState({}, '', path);
-  };
-
-  // Trang không có quyền xem thì hiện Tổng quan (tính khi render, không đặt state trong effect).
-  const view = isAuthed && !canAccessView(user, currentView) ? 'overview' : currentView;
-  // Đồng bộ địa chỉ trên thanh URL và trang đã lưu (hệ thống bên ngoài React).
-  useEffect(() => {
-    if (view === currentView) return;
-    window.history.replaceState({}, '', VIEW_TO_PATH.overview || '/overview');
-    localStorage.setItem(VIEW_KEY, 'overview');
-  }, [view, currentView]);
+    if (isAuthed && view && canAccessView(user, view)) localStorage.setItem(VIEW_KEY, view);
+  }, [isAuthed, user, view]);
 
   const handleLogin = (nextUser) => {
     localStorage.setItem(AUTH_KEY, 'true');
@@ -149,50 +111,18 @@ export default function App() {
       setUser(nextUser);
     }
     setIsAuthed(true);
-    navigate('overview');
+    // Giữ nguyên địa chỉ đang mở (link được gửi cho): đăng nhập xong vào đúng trang đó.
   };
 
   const handleLogout = () => {
     // Xóa cookie phiên ở backend; lỗi mạng vẫn đăng xuất phía giao diện.
     authApi.logout().catch((err) => console.warn('Đăng xuất phía server lỗi:', err));
     clearStoredAuth();
+    localStorage.removeItem(VIEW_KEY);
     setIsAuthed(false);
     setUser(null);
-    setCurrentView('overview');
-    localStorage.setItem(VIEW_KEY, 'overview');
-    window.history.pushState({}, '', '/');
+    navigate('/', { replace: true });
   };
-
-  const renderView = useMemo(() => {
-    switch (view) {
-      case 'daily':
-        return <Daily />;
-      case 'month':
-        return <Month />;
-      case 'overview':
-        return <OverView />;
-      case 'competitors':
-        return <Competitors />;
-      case 'marketing':
-        return <DepartmentView departmentCode="mkt" />;
-      case 'sale':
-        return <DepartmentView departmentCode="kinh_doanh" />;
-      case 'private-events':
-        return <DepartmentView departmentCode="internal" />;
-      case 'media-library':
-        return <MediaLibrary />;
-      case 'reports':
-        return <Reports />;
-      case 'setting':
-        return isAdmin ? <Setting /> : <OverView />;
-      default:
-        if (view.startsWith('dept-')) {
-          const dept = view.replace('dept-', '');
-          return <DepartmentView departmentCode={dept} />;
-        }
-        return <OverView />;
-    }
-  }, [view, isAdmin]);
 
   if (!isAuthed) {
     return <Login onLogin={handleLogin} />;
@@ -200,20 +130,38 @@ export default function App() {
 
   return (
     <Layout
-      currentView={view}
-      onNavigate={navigate}
+      currentView={view ?? 'overview'}
+      onNavigate={(id) => navigate(viewToPath(id))}
       onLogout={handleLogout}
       user={user}
     >
-      <Suspense
-        fallback={
-          <div className="flex h-full w-full items-center justify-center p-8 text-slate-400 text-sm font-medium">
-            Đang tải dữ liệu...
-          </div>
-        }
-      >
-        {renderView}
-      </Suspense>
+      {/* key theo đường dẫn: chuyển trang thì Error Boundary bắt đầu lại, lỗi trang cũ không đi theo. */}
+      <ErrorBoundary key={location.pathname}>
+        <Suspense
+          fallback={
+            <div className="flex h-full w-full items-center justify-center p-8 text-slate-400 text-sm font-medium">
+              Đang tải dữ liệu...
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Navigate to={homePath(user)} replace />} />
+            {Object.entries(PAGES).map(([id, page]) => (
+              <Route
+                key={id}
+                path={VIEW_PATHS[id]}
+                element={
+                  <Guard user={user} view={id}>
+                    {page}
+                  </Guard>
+                }
+              />
+            ))}
+            <Route path="/department/:code" element={<DepartmentRoute user={user} />} />
+            <Route path="*" element={<Navigate to={VIEW_PATHS.overview} replace />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </Layout>
   );
 }
