@@ -18,7 +18,8 @@ type SettingsKey =
   | 'telegram_config'
   | 'keyword_rules'
   | 'department_rules'
-  | 'departments_list';
+  | 'departments_list'
+  | 'tracked_products';
 type CrawlerSourcesSetting =
   | {
       targets?: Array<Record<string, unknown>>;
@@ -184,6 +185,18 @@ export class SettingsService {
 
     if (key === 'departments_list' && this.hasArrayProperty(value, 'list')) {
       return value.list;
+    }
+
+    if (key === 'tracked_products' && this.hasArrayProperty(value, 'products')) {
+      // Bỏ khoảng trắng thừa, bỏ cách viết rỗng hoặc trùng.
+      return value.products.map((p) => {
+        const item = p as { name: string; aliases: string[] };
+        const name = item.name.trim();
+        const aliases = [
+          ...new Set(item.aliases.map((a) => a.trim()).filter(Boolean)),
+        ].filter((a) => a.toLowerCase() !== name.toLowerCase());
+        return { name, aliases };
+      });
     }
 
     return value;

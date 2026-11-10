@@ -9,6 +9,7 @@ import { isValidImageName } from '../images/image-storage.js';
 import { EventsService } from '../events/service/events.service.js';
 import { Setting } from '../settings/entity/setting.entity.js';
 import { DashboardFilterDto } from './dto/dashboard-query.dto.js';
+import { countProductMentions, TrackedProduct } from './product-matcher.js';
 
 type RequestUser = {
   id: string;
@@ -281,6 +282,44 @@ export class DashboardService {
         count: Number(r.n),
       })),
     };
+  }
+
+  /**
+   * Sản phẩm được nhắc nhiều nhất trong kỳ, theo danh sách sản phẩm theo dõi (setting
+   * tracked_products). Chỉ đọc tiêu đề của các bài đã qua bộ lọc và phân quyền.
+   */
+  async products(f: ResolvedFilter, limit = 10) {
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'tracked_products' },
+    });
+    const products = DashboardService.trackedProducts(setting?.value);
+    if (!products.length) return { configured: 0, rows: [] };
+    const rows: Array<{ title: string | null }> = await this.applyFilter(
+      this.qb(),
+      f,
+    )
+      .select('e.title', 'title')
+      .getRawMany();
+    return {
+      configured: products.length,
+      rows: countProductMentions(
+        rows.map((r) => r.title ?? ''),
+        products,
+      ).slice(0, limit),
+    };
+  }
+
+  /** Đọc setting tracked_products, bỏ mục sai dạng. */
+  static trackedProducts(value: unknown): TrackedProduct[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((p: unknown) => {
+      const item = p as { name?: unknown; aliases?: unknown };
+      if (typeof item?.name !== 'string' || !item.name.trim()) return [];
+      const aliases = Array.isArray(item.aliases)
+        ? item.aliases.filter((a): a is string => typeof a === 'string')
+        : [];
+      return [{ name: item.name.trim(), aliases }];
+    });
   }
 
   /** Danh sách bài mới nhất trước, phân trang bằng con trỏ (eventDate, id). Không trả rawData. */

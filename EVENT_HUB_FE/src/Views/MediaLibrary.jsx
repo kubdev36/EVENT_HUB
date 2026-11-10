@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Search,
   ChevronLeft, 
@@ -18,9 +19,12 @@ import { CATEGORY_STYLES } from '../constants/eventStyles';
 export default function MediaLibrary() {
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  // ?q= trên URL (vd. bấm tên sản phẩm ở trang Báo cáo) điền sẵn ô tìm kiếm.
+  const [searchParams] = useSearchParams();
+  const initialQ = searchParams.get('q') ?? '';
+  const [searchQuery, setSearchQuery] = useState(initialQ);
   // Từ khóa gửi lên server sau khi ngừng gõ 300 ms (không gọi API mỗi lần gõ phím).
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialQ.trim());
   useEffect(() => {
     const t = setTimeout(() => setSearchTerm(searchQuery.trim()), 300);
     return () => clearTimeout(t);

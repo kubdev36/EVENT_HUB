@@ -62,6 +62,19 @@ export class DashboardController {
     );
   }
 
+  @Get('products')
+  @ApiOperation({
+    summary: 'Sản phẩm được nhắc nhiều nhất trong kỳ (theo danh sách theo dõi)',
+  })
+  async products(
+    @Query() q: DashboardFilterDto,
+    @Request() req: AuthedRequest,
+  ) {
+    return this.dashboard.products(
+      await this.dashboard.resolveFilter(q, req.user),
+    );
+  }
+
   @Get('sources')
   @ApiOperation({ summary: 'Danh sách nguồn (id, tên, logo) cho thanh menu' })
   sources() {

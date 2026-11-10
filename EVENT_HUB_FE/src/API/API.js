@@ -69,6 +69,7 @@ export const dashboardApi = {
   summary: (params) => api.get('/dashboard/summary', { params }),
   timeseries: (params) => api.get('/dashboard/timeseries', { params }),
   breakdown: (params) => api.get('/dashboard/breakdown', { params }),
+  products: (params) => api.get('/dashboard/products', { params }),
   events: (params) => api.get('/dashboard/events', { params }),
   sources: () => api.get('/dashboard/sources'),
 };
@@ -95,6 +96,7 @@ export const settingsApi = {
   saveTelegram: (payload) => api.post('/settings/telegram', payload),
   testTelegram: (payload) => api.post('/settings/telegram/test', payload),
   saveKeywords: (payload) => api.post('/settings/keywords', payload),
+  saveProducts: (payload) => api.post('/settings/products', payload),
   saveDepartments: (payload) => api.post('/settings/departments', payload),
   runCrawler: (payload) => api.post('/settings/crawler/run', payload),
   runCrawlerById: (id) => api.post(`/settings/crawler/run/${id}`),
