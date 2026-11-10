@@ -117,3 +117,12 @@ body,
   background-color: var(--color-blue-50) !important;
   border: 1px solid var(--color-blue-600) !important;
 }
+
+/* Trình duyệt tự điền tài khoản thì giữ nền trắng (Chrome mặc định tô xanh nhạt). */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-text-fill-color: #171717;
+  transition: background-color 9999s ease-out;
+}
