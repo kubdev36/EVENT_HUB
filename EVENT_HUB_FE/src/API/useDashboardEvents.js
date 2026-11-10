@@ -96,9 +96,24 @@ export function useRangeEvents(from, to, { includeOwn = true, enabled = true } =
   return { sources, isLoading: q.isLoading, error: q.error, refetch: q.refetch };
 }
 
-/** Bài có ảnh, mới nhất trước, tải thêm theo trang (thư viện ảnh). */
-export function useImageEvents({ from, to, pageSize = 60 }) {
-  const params = { from, to, includeOwn: 'true', hasImage: 'true', limit: pageSize };
+/**
+ * Bài có ảnh, mới nhất trước, tải thêm theo trang (thư viện ảnh). Mọi bộ lọc chạy ở server:
+ * segment 'all' | 'minhtuan' (nội bộ) | 'competitors'; type: loại bài; q: từ khóa.
+ */
+export function imageQueryParams({ from, to, segment = 'all', type = 'all', q = '', pageSize = 60 }) {
+  return {
+    from,
+    to,
+    hasImage: 'true',
+    limit: pageSize,
+    ...(segment === 'minhtuan' ? { brands: 'minhtuan' } : { includeOwn: segment === 'competitors' ? 'false' : 'true' }),
+    ...(type !== 'all' ? { type } : {}),
+    ...(q.trim() ? { q: q.trim() } : {}),
+  };
+}
+
+export function useImageEvents(options) {
+  const params = imageQueryParams(options);
   return useInfiniteQuery({
     queryKey: ['dash', 'image-events', params],
     queryFn: ({ pageParam }) => dashboardApi.events({ ...params, cursor: pageParam }).then((r) => r.data),

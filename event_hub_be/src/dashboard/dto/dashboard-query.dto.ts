@@ -86,4 +86,14 @@ export class EventListQueryDto extends DashboardFilterDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiPropertyOptional({
+    example: 'iphone',
+    description:
+      'Tìm trong tiêu đề bài và tên hãng (không phân biệt hoa thường)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
 }

@@ -284,7 +284,7 @@ export class DashboardService {
   }
 
   /** Danh sách bài mới nhất trước, phân trang bằng con trỏ (eventDate, id). Không trả rawData. */
-  async list(f: ResolvedFilter, limit = 20, cursor?: string) {
+  async list(f: ResolvedFilter, limit = 20, cursor?: string, search?: string) {
     const qb = this.applyFilter(this.qb(), f)
       .select([
         'e.id',
@@ -303,6 +303,15 @@ export class DashboardService {
       .orderBy('e.eventDate', 'DESC')
       .addOrderBy('e.id', 'DESC')
       .take(limit + 1);
+    const term = search?.trim();
+    if (term) {
+      // Ký tự đặc biệt của LIKE (%, _ và ký tự escape "!") được escape: gõ "50%" tìm đúng chuỗi "50%".
+      const pattern = `%${term.replace(/[!%_]/g, (ch) => `!${ch}`)}%`;
+      qb.andWhere(
+        "(e.title ILIKE :pattern ESCAPE '!' OR e.sourceName ILIKE :pattern ESCAPE '!')",
+        { pattern },
+      );
+    }
     if (cursor) {
       const c = DashboardService.decodeCursor(cursor);
       qb.andWhere(

@@ -197,6 +197,43 @@ d('DashboardService (Postgres)', () => {
     expect(list.items[0]).toMatchObject({ url: null, image: null });
   });
 
+  it('tìm theo chữ trong tiêu đề hoặc tên hãng, không phân biệt hoa thường; % và _ là chữ thường', async () => {
+    await insert([
+      ev({ eventDate: vn(2026, 11, 5), title: 'Giảm 50% iPhone 18 Pro' }),
+      ev({ eventDate: vn(2026, 11, 5), title: 'Galaxy S27 giảm 500k' }),
+      ev({
+        eventDate: vn(2026, 11, 5),
+        title: 'Phụ kiện sạc nhanh',
+        sourceId: 'fpt',
+        sourceName: 'FPT SHOP',
+      }),
+      ev({
+        eventDate: vn(2026, 11, 5),
+        title: 'Ưu đãi máy cũ',
+        type: 'release',
+      }),
+    ]);
+    const f = await filter('2026-11-01', '2026-11-07');
+    const titles = async (q: string) =>
+      (await service.list(f, 20, undefined, q)).items
+        .map((i) => i.title)
+        .sort();
+    expect(await titles('IPHONE')).toEqual(['Giảm 50% iPhone 18 Pro']);
+    expect(await titles('50%')).toEqual(['Giảm 50% iPhone 18 Pro']);
+    expect(await titles('_')).toEqual([]);
+    expect(await titles('fpt shop')).toEqual(['Phụ kiện sạc nhanh']);
+    expect(await titles('  ')).toHaveLength(4);
+    // Tìm kiếm kết hợp với bộ lọc loại bài.
+    const promoOnly = await filter('2026-11-01', '2026-11-07', {
+      types: ['release'],
+    });
+    expect(
+      (await service.list(promoOnly, 20, undefined, 'ưu đãi')).items.map(
+        (i) => i.title,
+      ),
+    ).toEqual(['Ưu đãi máy cũ']);
+  });
+
   it('includeOwn tính cả bài nội bộ; hasImage chỉ lấy bài có ảnh http(s)', async () => {
     await insert([
       ev({ eventDate: vn(2026, 11, 5), image: 'https://cdn.x.vn/a.jpg' }),

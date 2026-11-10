@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   ChevronLeft, 
@@ -19,6 +19,12 @@ export default function MediaLibrary() {
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Từ khóa gửi lên server sau khi ngừng gõ 300 ms (không gọi API mỗi lần gõ phím).
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   /** Khoảng ngày lọc ở server ({ from, to } theo lịch Việt Nam); null = tất cả (400 ngày gần nhất). */
   const [dateRange, setDateRange] = useState(null);
   const [activeIndex, setActiveIndex] = useState(null);
@@ -29,6 +35,9 @@ export default function MediaLibrary() {
   const images = useImageEvents({
     from: dateRange?.from ?? addDays(today, -399),
     to: dateRange?.to ?? today,
+    segment: selectedSegment,
+    type: selectedType,
+    q: searchTerm,
   });
   const imageItems = useMemo(() => (images.data?.pages ?? []).flatMap((p) => p.items), [images.data]);
 
@@ -65,23 +74,8 @@ export default function MediaLibrary() {
       });
   }, [imageItems, sources]);
 
-  const filteredPhotos = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return allPhotos.filter((item) => {
-      const matchSegment =
-        selectedSegment === 'all' ||
-        (selectedSegment === 'minhtuan' && item.brandId === 'minhtuan') ||
-        (selectedSegment === 'competitors' && item.brandId !== 'minhtuan');
-
-      const matchType = selectedType === 'all' || item.type === selectedType;
-      const matchSearch =
-        q === '' ||
-        item.title.toLowerCase().includes(q) ||
-        item.brandName.toLowerCase().includes(q);
-
-      return matchSegment && matchType && matchSearch;
-    });
-  }, [allPhotos, selectedSegment, selectedType, searchQuery]);
+  // Nhóm, loại bài và từ khóa đã lọc ở server (useImageEvents).
+  const filteredPhotos = allPhotos;
 
   const groupedPhotos = useMemo(() => {
     const groupsMap = new Map();
