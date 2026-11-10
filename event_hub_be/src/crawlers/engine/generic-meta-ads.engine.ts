@@ -39,7 +39,7 @@ export class GenericMetaAdsEngine {
 
     // 3. Extract from Facebook URL
     const match = clean.match(
-      /facebook\.com\/(?:pages\/[^\/]+\/)?([a-zA-Z0-9_.-]+)/i,
+      /facebook\.com\/(?:pages\/[^/]+\/)?([a-zA-Z0-9_.-]+)/i,
     );
     if (match) {
       const slug = match[1].toLowerCase().replace(/[^a-z0-9]/g, '');

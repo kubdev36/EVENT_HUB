@@ -97,15 +97,15 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
 
   useEffect(() => {
     let active = true;
-    settingsApi.getAll()
+    settingsApi.getDepartments()
       .then((res) => {
         if (!active) return;
-        const list = res.data?.departments_list;
-        if (Array.isArray(list) && list.length > 0) {
-          setDepartments(list);
-        }
+        if (Array.isArray(res.data)) setDepartments(res.data);
       })
-      .catch(() => {});
+      .catch((err) => {
+        // Không chặn trang: menu vẫn có các mục chung, chỉ thiếu mục phòng ban.
+        console.error('Không tải được danh sách phòng ban:', err);
+      });
     return () => { active = false; };
   }, []);
 

@@ -88,6 +88,8 @@ export function toCrawlerList(value) {
 
 export const settingsApi = {
   getAll: () => api.get('/settings'),
+  /** Mã và tên phòng ban; nhân viên cũng gọi được (GET /settings chỉ dành cho admin). */
+  getDepartments: () => api.get('/settings/departments'),
   getCrawlerSources: () =>
     api.get('/settings').then((response) => {
       return { ...response, data: toCrawlerList(response.data?.crawler_sources) };

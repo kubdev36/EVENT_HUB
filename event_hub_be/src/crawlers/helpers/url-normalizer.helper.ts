@@ -5,7 +5,18 @@ export class UrlNormalizerHelper {
     if (!rawUrl) return '';
     try {
       const parsed = new URL(rawUrl);
-      const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'spm', 'ref', 'from'];
+      const trackingParams = [
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_term',
+        'utm_content',
+        'fbclid',
+        'gclid',
+        'spm',
+        'ref',
+        'from',
+      ];
       trackingParams.forEach((param) => parsed.searchParams.delete(param));
 
       let clean = `${parsed.origin}${parsed.pathname}`;
@@ -21,10 +32,16 @@ export class UrlNormalizerHelper {
     }
   }
 
-  static buildContentHash(sourceId: string, url: string, title: string): string {
+  static buildContentHash(
+    sourceId: string,
+    url: string,
+    title: string,
+  ): string {
     const cleanUrl = this.normalizeUrl(url);
     const cleanTitle = this.normalizeText(title);
-    return createHash('sha256').update(`${sourceId}|${cleanUrl}|${cleanTitle}`).digest('hex');
+    return createHash('sha256')
+      .update(`${sourceId}|${cleanUrl}|${cleanTitle}`)
+      .digest('hex');
   }
 
   static normalizeText(value: string): string {
@@ -44,9 +61,16 @@ export class UrlNormalizerHelper {
 
     if (resolved.includes('_next/image?url=')) {
       try {
-        const urlParam = new URL(resolved.startsWith('http') ? resolved : `https://dummy.com${resolved}`).searchParams.get('url');
+        const urlParam = new URL(
+          resolved.startsWith('http')
+            ? resolved
+            : `https://dummy.com${resolved}`,
+        ).searchParams.get('url');
         if (urlParam) resolved = decodeURIComponent(urlParam);
-      } catch {}
+      } catch {
+        // Link ảnh Next.js hỏng (sai URL hoặc sai mã %): giữ link gốc, bước resolve bên dưới vẫn xử lý.
+        resolved = targetUrl.trim();
+      }
     }
 
     try {
@@ -57,7 +81,7 @@ export class UrlNormalizerHelper {
   }
 
   static isLikelyEventUrl(url: string): boolean {
-    if (!url || !url.startsWith('http')) return false;
+    if (!url || !/^https?:\/\//i.test(url)) return false;
     const lower = url.toLowerCase();
     const blacklist = [
       '/gioi-thieu',
