@@ -13,9 +13,9 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    // Nếu endpoint không khai báo @Roles thì cho phép truy cập
-    if (!requiredRoles) {
-      return true;
+    // Mặc định từ chối: endpoint dùng RolesGuard mà quên khai báo @Roles thì không ai vào được.
+    if (!requiredRoles?.length) {
+      throw new ForbiddenException('Bạn không có quyền truy cập tài nguyên này');
     }
 
     const { user } = context.switchToHttp().getRequest();

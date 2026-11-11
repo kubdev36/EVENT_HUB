@@ -182,6 +182,7 @@ Chưa nên đưa hệ thống ra internet trước khi xong nhóm "Trước go-l
 | CORS mở, `/docs` công khai, không có `helmet` | Chỉ cho domain thật, tắt `/docs` ở production, thêm `helmet` và HTTPS | Trước go-live |
 | Staff kích hoạt được crawl, có cả route GET | Xóa route GET, chỉ admin được chạy crawl | Trước go-live |
 | `getAllowedTypes` cho xem hết khi thiếu user | Mặc định từ chối, viết test phân quyền cho từng vai trò | Trước go-live |
+| `RolesGuard` cho qua endpoint không khai báo `@Roles` | Mặc định từ chối (403); mọi endpoint dùng `RolesGuard` phải ghi rõ `@Roles` (đã làm 11/11/2026) | Trước go-live |
 | URL nguồn crawl có thể trỏ vào mạng nội bộ (SSRF) | Chỉ cho `http(s)`, chặn IP nội bộ và metadata, kiểm tra lại sau mỗi redirect | Trước go-live |
 | Nội dung crawl không đáng tin, `url` của event chỉ kiểm tra là chuỗi | Chỉ nhận link `http(s)`, escape HTML khi gửi Telegram, rà các chỗ frontend render nội dung này | Trước go-live |
 | JWT lưu trong `localStorage` | Cookie httpOnly + chống CSRF (đã làm 08/11/2026); còn lại: access token ngắn hạn, refresh token, thu hồi phiên | Sau go-live |
