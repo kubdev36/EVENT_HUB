@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Bot, Users, Send, Sliders, Building2, ScrollText, Smartphone, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Bot, Users, Send, Sliders, Building2, ScrollText, Smartphone } from 'lucide-react';
 import { settingsApi, toCrawlerList } from '../API/API';
 import AuditTab from './Settings/tabs/AuditTab';
 import CrawlerSection from './Settings/sections/CrawlerSection';
@@ -9,6 +9,7 @@ import { EMPTY_TELEGRAM_CONFIG } from './Settings/sections/telegramConfig';
 import KeywordsSection from './Settings/sections/KeywordsSection';
 import DepartmentsSection from './Settings/sections/DepartmentsSection';
 import ProductsSection from './Settings/sections/ProductsSection';
+import { useToast } from '../Components/toast/toastContext';
 
 const TABS = [
   { id: 'crawler', label: 'Cấu hình Crawler', icon: Bot },
@@ -39,7 +40,10 @@ function fromSettings(settings) {
  */
 export default function Setting() {
   const [activeTab, setActiveTab] = useState('crawler');
-  const [statusMessage, setStatusMessage] = useState('');
+  const toast = useToast();
+  // Báo kết quả thao tác bằng toast; type 'error' cho lỗi.
+  const notify = useCallback((message, type) => toast.show(message, type), [toast]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [initial, setInitial] = useState(null);
   // Danh sách phòng ban dùng chung cho tab Nhân viên và tab Phòng ban.
   const [departmentsList, setDepartmentsList] = useState([]);
@@ -56,12 +60,14 @@ export default function Setting() {
       })
       .catch((err) => {
         console.error('Không tải được cấu hình:', err);
-        if (active) setStatusMessage(err.response?.data?.message || 'Không tải được cấu hình.');
+        if (!active) return;
+        setLoadFailed(true);
+        notify(err.response?.data?.message || 'Không tải được cấu hình.', 'error');
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [notify]);
 
   return (
     <div className="flex flex-col w-full bg-slate-50 text-slate-800 font-sans pb-10">
@@ -90,40 +96,31 @@ export default function Setting() {
       </div>
 
       <div className="p-3 sm:p-4 lg:p-6 space-y-4">
-        {statusMessage && (
-          <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium rounded-xl flex items-center justify-between transition">
-            <span>{statusMessage}</span>
-            <button onClick={() => setStatusMessage('')} className="p-1 hover:bg-blue-100 rounded text-blue-600 cursor-pointer">
-              <X size={14} />
-            </button>
-          </div>
-        )}
-
-        {!initial && !statusMessage && <p className="text-xs text-slate-400">Đang tải cấu hình...</p>}
+        {!initial && !loadFailed && <p className="text-xs text-slate-400">Đang tải cấu hình...</p>}
 
         {initial && (
           <>
             <div hidden={activeTab !== 'crawler'}>
-              <CrawlerSection initialCrawlers={initial.crawlers} notify={setStatusMessage} />
+              <CrawlerSection initialCrawlers={initial.crawlers} notify={notify} />
             </div>
             <div hidden={activeTab !== 'users'}>
-              <UsersSection departmentsList={departmentsList} notify={setStatusMessage} />
+              <UsersSection departmentsList={departmentsList} notify={notify} />
             </div>
             <div hidden={activeTab !== 'telegram'}>
-              <TelegramSection initialConfig={initial.telegram} notify={setStatusMessage} />
+              <TelegramSection initialConfig={initial.telegram} notify={notify} />
             </div>
             <div hidden={activeTab !== 'keywords'}>
-              <KeywordsSection initialRules={initial.keywordRules} notify={setStatusMessage} />
+              <KeywordsSection initialRules={initial.keywordRules} notify={notify} />
             </div>
             <div hidden={activeTab !== 'products'}>
-              <ProductsSection initialProducts={initial.trackedProducts} notify={setStatusMessage} />
+              <ProductsSection initialProducts={initial.trackedProducts} notify={notify} />
             </div>
             <div hidden={activeTab !== 'departments'}>
               <DepartmentsSection
                 departmentsList={departmentsList}
                 setDepartmentsList={setDepartmentsList}
                 initialRules={initial.departmentRules}
-                notify={setStatusMessage}
+                notify={notify}
               />
             </div>
           </>

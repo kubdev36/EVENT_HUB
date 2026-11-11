@@ -78,7 +78,7 @@ export default function CrawlerSection({ initialCrawlers, notify }) {
     try {
       trackCrawl((await settingsApi.runCrawlerById(crawler.id)).data);
     } catch (err) {
-      notify(err.response?.data?.message || `Xếp hàng cào ${crawler.name} thất bại.`);
+      notify(err.response?.data?.message || `Xếp hàng cào ${crawler.name} thất bại.`, 'error');
     } finally {
       setRunningId(null);
     }
@@ -89,7 +89,7 @@ export default function CrawlerSection({ initialCrawlers, notify }) {
     try {
       trackCrawl((await settingsApi.runAllCrawlers()).data);
     } catch (err) {
-      notify(err.response?.data?.message || 'Cào tất cả thất bại.');
+      notify(err.response?.data?.message || 'Cào tất cả thất bại.', 'error');
     } finally {
       setCrawlLoading(false);
     }
@@ -101,7 +101,7 @@ export default function CrawlerSection({ initialCrawlers, notify }) {
       await saveCrawlerList(updated);
       notify('Đã lưu cấu hình Crawler thành công.');
     } catch (err) {
-      notify(err.response?.data?.message || 'Lưu cấu hình Crawler thất bại.');
+      notify(err.response?.data?.message || 'Lưu cấu hình Crawler thất bại.', 'error');
     }
   };
 
