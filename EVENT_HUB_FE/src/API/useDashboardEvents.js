@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { API_URL, dashboardApi } from './API';
+import { API_URL, dashboardApi, logoSrc } from './API';
 
 /** Ảnh hiển thị của bài: ưu tiên ảnh thu nhỏ đã lưu trên máy chủ, không có thì dùng link gốc. */
 export function eventImage(e) {
@@ -28,7 +28,7 @@ export function useSources() {
     staleTime: 5 * 60_000,
   });
   const sources = useMemo(
-    () => (q.data ?? []).map((s) => ({ ...s, logo: s.logo || fallbackLogo(s.id, s.name) })),
+    () => (q.data ?? []).map((s) => ({ ...s, logo: logoSrc(s.logo, fallbackLogo(s.id, s.name)) })),
     [q.data],
   );
   return { sources, isLoading: q.isLoading, error: q.error };

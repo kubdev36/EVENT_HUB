@@ -17,6 +17,8 @@ import { SaveTrackedProductsDto } from '../dto/tracked-products.dto.js';
 import { RunCrawlerDto } from '../dto/run-crawler.dto.js';
 import { TelegramConfigDto } from '../dto/telegram-config.dto.js';
 import { SettingsService } from '../service/settings.service.js';
+import { ImageStorage } from '../../images/image-storage.js';
+import { convertDataUrlLogos } from '../../images/logo-upload.js';
 
 @ApiTags('settings')
 @ApiBearerAuth()
@@ -26,6 +28,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly queue: CrawlQueueService,
+    private readonly imageStorage: ImageStorage,
   ) {}
 
   @Get()
@@ -100,6 +103,11 @@ export class SettingsController {
     },
   })
   async updateCrawlers(@Body() data: SaveCrawlerSourcesDto) {
+    // Logo base64 cũ được đổi thành file /images/... trước khi lưu.
+    for (const key of ['targets', 'sources'] as const) {
+      const list = data[key];
+      if (list) data[key] = await convertDataUrlLogos(this.imageStorage, list);
+    }
     return this.settingsService.saveSetting('crawler_sources', data);
   }
 

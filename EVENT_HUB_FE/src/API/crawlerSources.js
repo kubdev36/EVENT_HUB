@@ -69,3 +69,11 @@ export async function addCrawlerSource(formData) {
   await saveCrawlerList(updated);
   return updated;
 }
+
+/** Lỗi tải logo dễ hiểu cho người dùng. */
+export function uploadErrorMessage(err) {
+  if (err?.response?.status === 413) return 'Ảnh quá 2 MB, chọn ảnh nhỏ hơn.';
+  const msg = err?.response?.data?.message;
+  if (msg) return Array.isArray(msg) ? msg.join('; ') : String(msg);
+  return 'Không tải được logo, thử lại.';
+}

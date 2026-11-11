@@ -86,6 +86,23 @@ export function toCrawlerList(value) {
   return [];
 }
 
+/** Ảnh tải lên máy chủ (logo đối thủ). */
+export const imagesApi = {
+  /** Gửi file logo; trả về { url: "/images/<tên>.webp" }. */
+  uploadLogo: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/images/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
+/** Logo lưu trên máy chủ (/images/...) cần ghép địa chỉ API; link khác dùng nguyên. */
+export function logoSrc(logo, fallback = '/img/mtm.png') {
+  if (!logo) return fallback;
+  if (logo.startsWith('/images/')) return `${API_URL}${logo}`;
+  return logo;
+}
+
 export const settingsApi = {
   getAll: () => api.get('/settings'),
   /** Mã và tên phòng ban; nhân viên cũng gọi được (GET /settings chỉ dành cho admin). */
