@@ -12,6 +12,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CrawlSource, CrawlTarget } from '../../crawlers/crawler.types.js';
 import { Setting } from '../entity/setting.entity.js';
+import {
+  EventTypeInfo,
+  eventTypesFromRules,
+} from '../../events/event-type-config.js';
 
 type SettingsKey =
   | 'crawler_sources'
@@ -148,6 +152,18 @@ export class SettingsService {
         },
       ];
     });
+  }
+
+  /** Loại sự kiện đang cấu hình (mã, tên, màu); nhân viên cũng đọc được, không kèm từ khóa. */
+  async listEventTypes(): Promise<EventTypeInfo[]> {
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'keyword_rules' },
+    });
+    const value = setting?.value as unknown;
+    const rules = Array.isArray(value)
+      ? value
+      : (value as { rules?: unknown } | undefined)?.rules;
+    return eventTypesFromRules(rules);
   }
 
   async testTelegramMessage(data: unknown) {

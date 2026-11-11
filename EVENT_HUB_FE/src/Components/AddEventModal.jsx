@@ -1,28 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Calendar, Clock, Image, Link, Tag, Building2, Plus, Loader2 } from 'lucide-react';
-import { eventsApi, settingsApi } from '../API/API';
-
-const FALLBACK_BRAND_OPTIONS = [
-  { id: 'minhtuan', name: 'Minh Tuấn Mobile' },
-  { id: 'cellphones', name: 'CellphoneS' },
-  { id: 'hoangha', name: 'Hoàng Hà Mobile' },
-  { id: 'fptshop', name: 'FPT Shop' },
-  { id: 'tgdd', name: 'Thế Giới Di Động' },
-  { id: 'nguyenkim', name: 'Nguyễn Kim' },
-];
-
-const TYPE_OPTIONS = [
-  { id: 'promo', label: 'Khuyến mãi' },
-  { id: 'release', label: 'Ra mắt sản phẩm' },
-  { id: 'live', label: 'Livestream' },
-  { id: 'ads', label: 'Quảng cáo' },
-  { id: 'internal', label: 'Sự kiện nội bộ' },
-];
+import { eventsApi } from '../API/API';
+import { useSources } from '../API/useDashboardEvents';
+import { buildBrandOptions, pickBrand } from './brandOptions';
+import { useEventTypes } from '../API/useEventTypes';
+import { styleForType } from '../constants/eventTypes';
 
 export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'minhtuan', defaultType = 'promo' }) {
-  const [brandOptions, setBrandOptions] = useState(FALLBACK_BRAND_OPTIONS);
-  const [sourceId, setSourceId] = useState(defaultBrandId);
-  const [type, setType] = useState(defaultType);
+  // Thương hiệu lấy từ cấu hình nguồn (/dashboard/sources: nhân viên cũng gọi được), không cố định trong code.
+  const { sources, isLoading: sourcesLoading, error: sourcesError } = useSources();
+  const brandOptions = useMemo(() => buildBrandOptions(sources), [sources]);
+  const [wantedSourceId, setSourceId] = useState(defaultBrandId);
+  const sourceId = pickBrand(brandOptions, wantedSourceId);
+  // Loại sự kiện lấy từ cấu hình (tab Từ khóa phân loại); khi chưa tải xong chỉ có loại mặc định.
+  const { types: eventTypes } = useEventTypes();
+  const typeOptions = useMemo(
+    () =>
+      eventTypes.length
+        ? eventTypes.map((t) => ({ id: t.type, label: t.label }))
+        : [{ id: defaultType, label: styleForType(defaultType).label }],
+    [eventTypes, defaultType]
+  );
+  const [wantedType, setType] = useState(defaultType);
+  const type = typeOptions.some((t) => t.id === wantedType) ? wantedType : typeOptions[0].id;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState(() => {
@@ -38,25 +38,6 @@ export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'mi
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    settingsApi
-      .getCrawlerSources()
-      .then((res) => {
-        const sources = res?.data?.sources || res?.data;
-        if (Array.isArray(sources) && sources.length > 0) {
-          const formatted = sources.map((s) => ({ id: s.id, name: s.name }));
-          const merged = [...formatted];
-          FALLBACK_BRAND_OPTIONS.forEach((fb) => {
-            if (!merged.some((m) => m.id === fb.id)) {
-              merged.push(fb);
-            }
-          });
-          setBrandOptions(merged);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -67,17 +48,14 @@ export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'mi
     setIsLoading(true);
     setError('');
 
-    const selectedBrand = brandOptions.find((b) => b.id === sourceId);
-
     try {
       await eventsApi.create({
         sourceId,
-        sourceName: selectedBrand ? selectedBrand.name : 'Minh Tuấn Mobile',
         type,
         title: title.trim(),
         description: description.trim() || undefined,
         eventDate: eventDate ? `${eventDate}T00:00:00.000Z` : undefined,
-        eventTime,
+        eventTime: eventTime || undefined,
         image: image.trim() || undefined,
         url: url.trim() || undefined,
       });
@@ -122,14 +100,24 @@ export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'mi
               <select
                 value={sourceId}
                 onChange={(e) => setSourceId(e.target.value)}
-                className="w-full h-9 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 bg-white"
+                disabled={sourcesLoading}
+                className="w-full h-9 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 bg-white disabled:bg-slate-50 disabled:text-slate-400"
               >
-                {brandOptions.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
+                {sourcesLoading ? (
+                  <option value={sourceId}>Đang tải danh sách...</option>
+                ) : (
+                  brandOptions.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))
+                )}
               </select>
+              {sourcesError && (
+                <p className="text-[11px] text-rose-600">
+                  Không tải được danh sách đối thủ; hiện chỉ chọn được {brandOptions[0]?.name}.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -141,7 +129,7 @@ export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'mi
                 onChange={(e) => setType(e.target.value)}
                 className="w-full h-9 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 bg-white"
               >
-                {TYPE_OPTIONS.map((t) => (
+                {typeOptions.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>

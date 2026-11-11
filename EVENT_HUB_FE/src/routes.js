@@ -35,11 +35,14 @@ export function viewToPath(view) {
   return VIEW_PATHS[view] ?? VIEW_PATHS.overview;
 }
 
-/** Quyền xem trang: admin xem hết; Cài đặt chỉ admin; trang phòng ban chỉ người thuộc phòng ban đó. */
+/** Trang chỉ admin xem. Nhân viên xem sự kiện theo ngày ở trang phòng ban của mình (cùng dữ liệu). */
+const ADMIN_ONLY_VIEWS = ['setting', 'daily'];
+
+/** Quyền xem trang: admin xem hết; Cài đặt và Xem theo ngày chỉ admin; trang phòng ban chỉ người thuộc phòng ban đó. */
 export function canAccessView(user, view) {
   if (!view) return false;
   if (user?.role === 'admin') return true;
-  if (view === 'setting') return false;
+  if (ADMIN_ONLY_VIEWS.includes(view)) return false;
   if (view.startsWith('dept-'))
     return normalizeDepartment(user?.department) === normalizeDepartment(view.slice(5));
   const required = VIEW_DEPARTMENTS[view];

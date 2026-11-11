@@ -1,3 +1,4 @@
+import { useEventTypes } from '../API/useEventTypes';
 import { useState, useMemo } from 'react';
 import { Search, Plus, Clock } from 'lucide-react';
 import Calendar from '../Components/Calendar';
@@ -6,9 +7,16 @@ import EventDetail from '../Components/EventDetail';
 import AddEventModal from '../Components/AddEventModal';
 import { useRangeEvents } from '../API/useDashboardEvents';
 
-const COMPETITOR_TYPES = ['promo', 'ads', 'live', 'release', 'sale', 'other'];
+/** Tên cũ còn trong dữ liệu của đối thủ (gộp với loại mới khi hiển thị). */
+const LEGACY_COMPETITOR_TYPES = ['sale', 'livestream', 'product_launch'];
 
 export default function Competitor() {
+  // Mọi loại đang cấu hình trừ "nội bộ" (loại tự thêm cũng hiện ở đây).
+  const { types: eventTypes } = useEventTypes();
+  const COMPETITOR_TYPES = useMemo(
+    () => [...eventTypes.filter((t) => t.type !== 'internal').map((t) => t.type), ...LEGACY_COMPETITOR_TYPES],
+    [eventTypes]
+  );
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedCompetitor, setSelectedCompetitor] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,7 +47,7 @@ export default function Competitor() {
         };
       })
       .filter((comp) => comp.totalEvents > 0);
-  }, [dateStr, searchQuery, sources]);
+  }, [dateStr, searchQuery, sources, COMPETITOR_TYPES]);
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-slate-50 text-slate-800 font-sans">

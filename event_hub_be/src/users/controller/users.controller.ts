@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -32,13 +33,16 @@ export class UsersController {
 
   @Post()
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create user' })
+  @ApiOperation({
+    summary: 'Create user (mật khẩu luôn sinh ngẫu nhiên, trả về một lần)',
+  })
   @ApiBody({
     schema: {
       example: {
         email: 'staff@company.com',
-        password: 'EventHub@2026',
+        fullName: 'Nguyễn Văn A',
         role: 'staff',
+        department: 'MKT',
       },
     },
   })
@@ -53,13 +57,16 @@ export class UsersController {
     schema: {
       example: {
         email: 'staff@company.com',
-        password: 'EventHub@2026',
         role: 'admin',
       },
     },
   })
-  async updateUser(@Param('id') id: string, @Body() body: UserBodyDto) {
-    return this.usersService.update(id, body);
+  async updateUser(
+    @Param('id') id: string,
+    @Body() body: UserBodyDto,
+    @Request() req: { user?: { id: string } },
+  ) {
+    return this.usersService.update(id, body, req.user?.id);
   }
 
   @Put(':id/reset-password')
@@ -72,7 +79,10 @@ export class UsersController {
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete user' })
-  async deleteUser(@Param('id') id: string) {
-    return this.usersService.delete(id);
+  async deleteUser(
+    @Param('id') id: string,
+    @Request() req: { user?: { id: string } },
+  ) {
+    return this.usersService.delete(id, req.user?.id);
   }
 }

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -13,10 +21,13 @@ import { Roles } from '../../auth/decorators/roles.decorator.js';
 import { CrawlQueueService } from '../../queue/crawl-queue.service.js';
 import { SaveCrawlerSourcesDto } from '../dto/crawler-sources.dto.js';
 import { SaveKeywordRulesDto } from '../dto/keyword-rules.dto.js';
+import { validateKeywordRules } from '../../events/event-type-config.js';
 import { SaveTrackedProductsDto } from '../dto/tracked-products.dto.js';
 import { RunCrawlerDto } from '../dto/run-crawler.dto.js';
 import { TelegramConfigDto } from '../dto/telegram-config.dto.js';
 import { SettingsService } from '../service/settings.service.js';
+import { ImageStorage } from '../../images/image-storage.js';
+import { convertDataUrlLogos } from '../../images/logo-upload.js';
 
 @ApiTags('settings')
 @ApiBearerAuth()
@@ -26,6 +37,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly queue: CrawlQueueService,
+    private readonly imageStorage: ImageStorage,
   ) {}
 
   @Get()
@@ -100,6 +112,11 @@ export class SettingsController {
     },
   })
   async updateCrawlers(@Body() data: SaveCrawlerSourcesDto) {
+    // Logo base64 cũ được đổi thành file /images/... trước khi lưu.
+    for (const key of ['targets', 'sources'] as const) {
+      const list = data[key];
+      if (list) data[key] = await convertDataUrlLogos(this.imageStorage, list);
+    }
     return this.settingsService.saveSetting('crawler_sources', data);
   }
 
@@ -165,7 +182,19 @@ export class SettingsController {
     },
   })
   async updateKeywords(@Body() data: SaveKeywordRulesDto) {
+    const problem = validateKeywordRules(data.rules);
+    if (problem) throw new BadRequestException(problem);
     return this.settingsService.saveSetting('keyword_rules', data);
+  }
+
+  @Get('event-types')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({
+    summary:
+      'Danh sách loại sự kiện (mã, tên, màu) để hiển thị; không kèm từ khóa',
+  })
+  async listEventTypes() {
+    return this.settingsService.listEventTypes();
   }
 
   @Post('products')

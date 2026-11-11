@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isPasswordChangeRequired, PASSWORD_CHANGE_EVENT } from './passwordChange';
 
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
@@ -39,6 +40,8 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+    // Tài khoản còn mật khẩu tạm: báo App chuyển sang màn hình đổi mật khẩu.
+    if (isPasswordChangeRequired(error)) window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
     const isAuthCall = AUTH_PATHS.some((p) => original?.url?.endsWith(p));
     if (error.response?.status !== 401 || !original || isAuthCall || original._retried) {
       if (error.response?.status === 401 && original?._retried) endSession();
@@ -62,6 +65,7 @@ export const authApi = {
   login: (payload) => api.post('/auth/login', payload),
   me: () => api.get('/auth/me'),
   logout: () => api.post('/auth/logout'),
+  changePassword: (payload) => api.post('/auth/change-password', payload),
 };
 
 /** API dashboard mới: số liệu tính sẵn bằng SQL (Tổng quan, Báo cáo). */
@@ -86,6 +90,23 @@ export function toCrawlerList(value) {
   return [];
 }
 
+/** Ảnh tải lên máy chủ (logo đối thủ). */
+export const imagesApi = {
+  /** Gửi file logo; trả về { url: "/images/<tên>.webp" }. */
+  uploadLogo: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/images/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
+/** Logo lưu trên máy chủ (/images/...) cần ghép địa chỉ API; link khác dùng nguyên. */
+export function logoSrc(logo, fallback = '/img/mtm.png') {
+  if (!logo) return fallback;
+  if (logo.startsWith('/images/')) return `${API_URL}${logo}`;
+  return logo;
+}
+
 export const settingsApi = {
   getAll: () => api.get('/settings'),
   /** Mã và tên phòng ban; nhân viên cũng gọi được (GET /settings chỉ dành cho admin). */
@@ -98,6 +119,8 @@ export const settingsApi = {
   saveTelegram: (payload) => api.post('/settings/telegram', payload),
   testTelegram: (payload) => api.post('/settings/telegram/test', payload),
   saveKeywords: (payload) => api.post('/settings/keywords', payload),
+  /** Loại sự kiện (mã, tên, màu); nhân viên cũng gọi được. */
+  getEventTypes: () => api.get('/settings/event-types'),
   saveProducts: (payload) => api.post('/settings/products', payload),
   saveDepartments: (payload) => api.post('/settings/departments', payload),
   runCrawler: (payload) => api.post('/settings/crawler/run', payload),

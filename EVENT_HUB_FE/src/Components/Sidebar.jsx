@@ -14,6 +14,7 @@ import {
   Check,
   X,
   LogOut,
+  KeyRound,
 } from 'lucide-react';
 import { useSources } from '../API/useDashboardEvents';
 import { settingsApi } from '../API/API';
@@ -23,6 +24,7 @@ import CrawlerModal from '../Views/Settings/modals/CrawlerModal';
 
 const EMPTY_CRAWLER_FORM = { name: '', logo: '', interval: '6h', targetUrls: [''] };
 import { normalizeDepartment } from '../utils/helpers';
+import { canAccessView } from '../routes';
 import { useFilterContext } from '../context/useFilterContext';
 
 const BASE_MENU_TOP = [
@@ -62,7 +64,7 @@ function getDepartmentViewId(code) {
   return `dept-${norm}`;
 }
 
-export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user, onLogout }) {
+export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, onClose, user, onLogout, onChangePassword }) {
   // Chỉ cần tên và logo của đối thủ: gọi API nhẹ, không tải toàn bộ bài viết.
   const { sources: allSources } = useSources();
   const sources = allSources.filter((s) => !s.own);
@@ -119,10 +121,11 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
       code: dept.code,
     }));
 
+  // Chỉ hiện trang người dùng được xem (cùng quy tắc với routes.canAccessView).
   const menuItems = [
-    ...BASE_MENU_TOP,
+    ...BASE_MENU_TOP.filter((item) => canAccessView(user, item.id)),
     ...deptMenuItems,
-    ...BASE_MENU_BOTTOM.filter((item) => (item.id === 'setting' ? isAdmin : true)),
+    ...BASE_MENU_BOTTOM.filter((item) => canAccessView(user, item.id)),
   ];
 
   // Quick filters
@@ -270,6 +273,16 @@ export default function Sidebar({ currentView = 'overview', onNavigate, isOpen, 
             <div className="px-1 pb-2 text-[11px] text-slate-500 truncate" title={user.email}>
               {user.email}
             </div>
+          )}
+          {onChangePassword && (
+            <button
+              type="button"
+              onClick={onChangePassword}
+              className="w-full h-9 rounded-lg px-3 flex items-center gap-3 text-[13px] font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition cursor-pointer"
+            >
+              <KeyRound size={16} className="text-slate-500" />
+              <span>Đổi mật khẩu</span>
+            </button>
           )}
           <button
             type="button"

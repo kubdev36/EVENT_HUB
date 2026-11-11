@@ -25,7 +25,7 @@ export default function TelegramSection({ initialConfig, notify }) {
       setConfig({ ...EMPTY_TELEGRAM_CONFIG, ...res.data?.value });
       notify('Đã lưu cấu hình Telegram thành công.');
     } catch (err) {
-      notify(err.response?.data?.message || 'Lưu cấu hình Telegram thất bại.');
+      notify(err.response?.data?.message || 'Lưu cấu hình Telegram thất bại.', 'error');
     } finally {
       setSaving(false);
     }
@@ -37,7 +37,7 @@ export default function TelegramSection({ initialConfig, notify }) {
       await settingsApi.testTelegram(telegramPayload(config));
       notify('Đã gửi tin nhắn thử nghiệm Telegram.');
     } catch (err) {
-      notify(err.response?.data?.message || 'Kiểm tra Telegram thất bại.');
+      notify(err.response?.data?.message || 'Kiểm tra Telegram thất bại.', 'error');
     } finally {
       setSaving(false);
     }

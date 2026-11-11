@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Upload, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
+import { imagesApi, logoSrc } from '../../../API/API';
+import { uploadErrorMessage } from '../../../API/crawlerSources';
+import { canSaveCrawler } from './crawlerModalState';
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 const ADVANCED_KEYS = ['extract', 'api'];
 
@@ -76,6 +81,14 @@ export default function CrawlerModal({
   saving = false,
   error = '',
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  // Modal không bị unmount khi đóng, nên xóa lỗi tải logo cũ mỗi lần mở lại.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setUploadError('');
+  }
   if (!isOpen) return null;
 
   const isAdd = mode === 'add';
@@ -129,7 +142,7 @@ export default function CrawlerModal({
                   <img
                     loading="lazy"
                     referrerPolicy="no-referrer"
-                    src={formData.logo}
+                    src={logoSrc(formData.logo)}
                     alt="Logo preview"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
@@ -155,22 +168,31 @@ export default function CrawlerModal({
               <label className="flex-1 cursor-pointer">
                 <div className="h-8.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100/80 text-blue-600 font-semibold px-3 flex items-center justify-center gap-2 transition text-xs select-none shadow-2xs">
                   <Upload size={14} />
-                  <span>{formData.logo ? 'Thay đổi file logo (Browse...)' : 'Tải file logo từ máy (Browse...)'}</span>
+                  <span>{uploading ? 'Đang tải logo lên...' : formData.logo ? 'Thay đổi file logo (Browse...)' : 'Tải file logo từ máy (Browse...)'}</span>
                 </div>
                 <input
                   type="file"
-                  accept="image/*,.htm,.html,*"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
                   className="hidden"
-                  onChange={(e) => {
+                  disabled={uploading}
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
+                    e.target.value = '';
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (evt) => {
-                      if (evt.target?.result) {
-                        setFormData((prev) => ({ ...prev, logo: evt.target.result }));
-                      }
-                    };
-                    reader.readAsDataURL(file);
+                    setUploadError('');
+                    if (file.size > MAX_LOGO_BYTES) {
+                      setUploadError('Ảnh quá 2 MB, chọn ảnh nhỏ hơn.');
+                      return;
+                    }
+                    setUploading(true);
+                    try {
+                      const { data } = await imagesApi.uploadLogo(file);
+                      setFormData((prev) => ({ ...prev, logo: data.url }));
+                    } catch (err) {
+                      setUploadError(uploadErrorMessage(err));
+                    } finally {
+                      setUploading(false);
+                    }
                   }}
                 />
               </label>
@@ -180,9 +202,10 @@ export default function CrawlerModal({
               type="text"
               value={formData.logo || ''}
               onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
-              placeholder="Hoặc dán link URL logo (.png, .jpg, .htm, .html...)"
+              placeholder="Hoặc dán link URL logo (https://...)"
               className="w-full h-8 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px] mt-1"
             />
+            {uploadError && <p className="text-[11px] text-rose-600">{uploadError}</p>}
           </div>
 
           <div className="space-y-2">
@@ -241,7 +264,7 @@ export default function CrawlerModal({
             </button>
             <button
               onClick={onSave}
-              disabled={saving || Boolean(formData.advancedError)}
+              disabled={!canSaveCrawler({ saving, uploading, advancedError: formData.advancedError })}
               className="h-8.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer shadow-xs disabled:opacity-50"
             >
               {saving ? 'Đang lưu...' : 'Lưu thay đổi'}

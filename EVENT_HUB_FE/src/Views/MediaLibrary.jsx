@@ -14,9 +14,10 @@ import {
 import { eventImage, useImageEvents, useSources } from '../API/useDashboardEvents';
 import { addDays, safeHttpUrl, vnToday } from './dashboard/shared';
 import DateRangeFilter from './media/DateRangeFilter';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { useEventTypes } from '../API/useEventTypes';
 
 export default function MediaLibrary() {
+  const { styleOf, types: eventTypes } = useEventTypes();
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   // ?q= trên URL (vd. bấm tên sản phẩm ở trang Báo cáo) điền sẵn ô tìm kiếm.
@@ -160,14 +161,7 @@ export default function MediaLibrary() {
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-full">
-            {[
-              { id: 'all', label: 'Tất cả danh mục' },
-              { id: 'promo', label: 'Khuyến mãi' },
-              { id: 'release', label: 'Ra mắt' },
-              { id: 'live', label: 'Livestream' },
-              { id: 'ads', label: 'Quảng cáo' },
-              { id: 'internal', label: 'Nội bộ' },
-            ].map((cat) => (
+            {[{ id: 'all', label: 'Tất cả danh mục' }, ...eventTypes.map((t) => ({ id: t.type, label: t.label }))].map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedType(cat.id)}
@@ -196,7 +190,7 @@ export default function MediaLibrary() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-2.5">
                 {photos.map((item) => {
                   const globalIdx = filteredPhotos.findIndex((p) => p.id === item.id);
-                  const style = CATEGORY_STYLES[item.type] || CATEGORY_STYLES.promo;
+                  const style = styleOf(item.type);
 
                   return (
                     <div
@@ -323,8 +317,8 @@ export default function MediaLibrary() {
             {showInfoPanel ? (
               <div className="max-w-xl w-full bg-[#1c1c1e] text-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-white/10 shadow-2xl space-y-2.5 sm:space-y-3 mb-2 animate-in slide-in-from-bottom-5 duration-150 max-h-[30vh] overflow-y-auto">
                 <div className="flex items-center justify-between">
-                  <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full ${CATEGORY_STYLES[currentPhoto.type]?.pill}`}>
-                    {CATEGORY_STYLES[currentPhoto.type]?.label}
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full ${styleOf(currentPhoto.type).pill}`}>
+                    {styleOf(currentPhoto.type).label}
                   </span>
                   <div className="flex items-center gap-2.5 sm:gap-3 text-[10px] sm:text-xs text-white/60">
                     <span className="flex items-center gap-1"><Calendar size={12} /> {currentPhoto.date}</span>

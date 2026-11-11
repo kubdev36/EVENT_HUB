@@ -3,14 +3,13 @@ import { usersApi } from '../../../API/API';
 import UsersTab from '../tabs/UsersTab';
 import UserModal from '../modals/UserModal';
 import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
+import OneTimePasswordModal from '../modals/OneTimePasswordModal';
 import { useModalState } from './useModalState';
 
-const DEFAULT_PASSWORD = 'EventHub@2026';
-const MASKED = '••••••••';
 
 const toRow = (u) => ({
   id: u.id,
-  name: u.email,
+  name: u.fullName || '',
   email: u.email,
   department: u.department || 'mkt',
   role: u.role === 'admin' ? 'Admin' : 'Staff',
@@ -20,6 +19,8 @@ const toRow = (u) => ({
 /** Tab "Tài khoản nhân viên": danh sách, thêm, sửa, xóa, đặt lại mật khẩu. */
 export default function UsersSection({ departmentsList, notify }) {
   const [users, setUsers] = useState([]);
+  // Mật khẩu máy chủ vừa sinh (tạo tài khoản không nhập mật khẩu, hoặc đặt lại): chỉ giữ trong bộ nhớ.
+  const [oneTime, setOneTime] = useState(null);
   const modal = useModalState();
   const defaultDept = departmentsList[0]?.code || 'mkt';
 
@@ -33,7 +34,7 @@ export default function UsersSection({ departmentsList, notify }) {
     usersApi
       .list()
       .then((res) => active && setUsers((Array.isArray(res.data) ? res.data : []).map(toRow)))
-      .catch((err) => active && notify(err.response?.data?.message || 'Không tải được danh sách nhân viên.'));
+      .catch((err) => active && notify(err.response?.data?.message || 'Không tải được danh sách nhân viên.', 'error'));
     return () => {
       active = false;
     };
@@ -41,6 +42,7 @@ export default function UsersSection({ departmentsList, notify }) {
 
   const payload = (f) => ({
     email: f.email,
+    fullName: (f.name || '').trim(),
     role: (f.role || 'Staff').toLowerCase(),
     department: f.department || defaultDept,
   });
@@ -49,16 +51,18 @@ export default function UsersSection({ departmentsList, notify }) {
     modal.run(async () => {
       const f = modal.formData;
       if (modal.mode === 'add') {
-        await usersApi.create({ ...payload(f), password: f.password || DEFAULT_PASSWORD });
+        // Mật khẩu do máy chủ sinh ngẫu nhiên; chỉ hiện một lần.
+        const { data } = await usersApi.create(payload(f));
+        if (data?.generatedPassword) setOneTime({ email: f.email, password: data.generatedPassword });
         notify(`Đã thêm nhân viên ${f.email}.`);
       } else if (modal.mode === 'edit') {
-        // Ô mật khẩu còn giá trị che (••••) nghĩa là không đổi mật khẩu.
-        const password = f.password && !f.password.includes('•') ? f.password : undefined;
-        await usersApi.update(modal.item.id, { ...payload(f), password });
+        // Không gửi mật khẩu: admin chỉ cấp lại bằng Reset mật khẩu.
+        await usersApi.update(modal.item.id, payload(f));
         notify(`Đã cập nhật nhân viên ${f.email}.`);
       } else if (modal.mode === 'reset-pass') {
-        await usersApi.resetPassword(modal.item.id);
-        notify(`Đã đặt lại mật khẩu cho ${modal.item.email} thành ${DEFAULT_PASSWORD}.`);
+        const { data } = await usersApi.resetPassword(modal.item.id);
+        setOneTime({ email: modal.item.email, password: data.password });
+        notify(`Đã đặt lại mật khẩu cho ${modal.item.email}.`);
         return;
       }
       await reload();
@@ -75,10 +79,10 @@ export default function UsersSection({ departmentsList, notify }) {
     <>
       <UsersTab
         users={users}
-        onAddUser={() => modal.open('add', null, { name: '', email: '', password: '', department: defaultDept, role: 'Staff' })}
-        onEditUser={(u) => modal.open('edit', u, { ...u, password: MASKED })}
+        onAddUser={() => modal.open('add', null, { name: '', email: '', department: defaultDept, role: 'Staff' })}
+        onEditUser={(u) => modal.open('edit', u, { ...u })}
         onDeleteUser={(u) => modal.open('delete', u)}
-        onResetPassword={(u) => modal.open('reset-pass', u, { ...u, password: MASKED })}
+        onResetPassword={(u) => modal.open('reset-pass', u, { ...u })}
       />
       <UserModal
         isOpen={['add', 'edit', 'reset-pass'].includes(modal.mode)}
@@ -94,11 +98,12 @@ export default function UsersSection({ departmentsList, notify }) {
       <ConfirmDeleteModal
         isOpen={modal.mode === 'delete'}
         title="Xác nhận xóa nhân viên"
-        itemName={modal.item?.name}
+        itemName={modal.item?.name || modal.item?.email}
         onClose={modal.close}
         onConfirm={remove}
         saving={modal.saving}
       />
+      <OneTimePasswordModal data={oneTime} onClose={() => setOneTime(null)} />
     </>
   );
 }

@@ -179,9 +179,20 @@ export class CrawlerSourceItemDto {
   @IsIn(['web', 'facebook'])
   type?: 'web' | 'facebook';
 
+  /**
+   * Link http(s) hoặc đường dẫn trong hệ thống (/img/..., /images/...). Logo base64 cũ
+   * (data:image/...) vẫn nhận để lưu được, rồi được đổi thành file /images/... khi lưu.
+   */
   @ApiProperty({ example: '/img/mtm.png', required: false })
   @IsOptional()
   @IsString()
+  @Matches(
+    /^(https?:\/\/[^\s]{1,2040}|\/(img|images)\/(?!.*\.\.)[^\s]{1,2030}|data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+)$/i,
+    {
+      message:
+        'logo phải là link http(s) hoặc đường dẫn /images/... (tải file bằng nút tải logo)',
+    },
+  )
   logo?: string;
 
   @ApiProperty({ example: true, required: false })

@@ -128,6 +128,14 @@ export function useElementWidth() {
   return [ref, width];
 }
 
+/** Mở link bài viết ở tab mới: chỉ http(s), không cho trang ngoài truy cập window.opener. */
+export function openSafe(u, open = window.open) {
+  const href = safeHttpUrl(u);
+  if (!href) return false;
+  open(href, '_blank', 'noopener,noreferrer');
+  return true;
+}
+
 export function safeHttpUrl(u) {
   try {
     const x = new URL(u);

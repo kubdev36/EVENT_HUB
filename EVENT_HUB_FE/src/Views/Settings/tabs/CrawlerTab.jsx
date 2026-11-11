@@ -1,3 +1,4 @@
+import { logoSrc } from '../../../API/API';
 import { Plus, Play, Loader2, Edit2, Trash2, Clock } from 'lucide-react';
 
 export default function CrawlerTab({
@@ -52,7 +53,7 @@ export default function CrawlerTab({
                 <img
                   loading="lazy"
                   referrerPolicy="no-referrer"
-                  src={c.logo || '/img/mtm.png'}
+                  src={logoSrc(c.logo)}
                   alt={c.name}
                   onError={(e) => {
                     e.currentTarget.onerror = null;

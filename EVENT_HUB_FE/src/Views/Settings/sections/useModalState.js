@@ -36,7 +36,7 @@ export function useModalState() {
       const message = err.response?.data?.message || err.message || 'Thao tác thất bại.';
       if (err instanceof ValidationError) setError(message);
       else {
-        onError?.(message);
+        onError?.(message, 'error');
         close();
       }
     } finally {
