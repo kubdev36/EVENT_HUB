@@ -32,6 +32,7 @@ export class UsersService {
       .select([
         'user.id',
         'user.email',
+        'user.fullName',
         'user.role',
         'user.department',
         'user.isActive',
@@ -52,21 +53,29 @@ export class UsersService {
       throw new BadRequestException('Email đã tồn tại.');
     }
 
-    // Không nhập mật khẩu thì sinh ngẫu nhiên, chỉ trả về một lần trong response này.
-    const generated = dto.password ? null : generatePassword();
+    // Luôn sinh mật khẩu ngẫu nhiên (bỏ qua password client gửi), chỉ trả về một lần trong response này.
+    const generated = generatePassword();
     const user = this.userRepository.create({
       email,
-      password: await this.hasher.hash(dto.password || generated),
+      fullName: dto.fullName || null,
+      password: await this.hasher.hash(generated),
       role,
       department: dto.department || 'MKT',
+      // Mật khẩu tạm: nhân viên phải đổi ở lần đăng nhập đầu.
+      mustChangePassword: true,
     });
 
     const saved = withoutPassword(await this.userRepository.save(user));
-    return generated ? { ...saved, generatedPassword: generated } : saved;
+    return { ...saved, generatedPassword: generated };
   }
 
   /** actorId: admin đang thao tác; không được tự hạ quyền, và luôn phải còn ít nhất một admin. */
   async update(id: string, dto: any, actorId?: string) {
+    // Admin không đặt mật khẩu cho người khác: chỉ Reset (ngẫu nhiên) hoặc người dùng tự đổi.
+    if (dto.password !== undefined && dto.password !== null && dto.password !== '')
+      throw new BadRequestException(
+        'Không đổi mật khẩu ở đây: dùng "Reset mật khẩu" hoặc người dùng tự đổi.',
+      );
     const nextRole = dto.role === undefined ? undefined : parseRole(dto.role);
     if (nextRole === null) throw new BadRequestException(INVALID_ROLE);
 
@@ -89,22 +98,17 @@ export class UsersService {
           revoke = true;
         }
 
+        if (dto.fullName !== undefined) user.fullName = dto.fullName || null;
+
         if (dto.department && dto.department !== user.department) {
           user.department = dto.department;
           revoke = true;
         }
 
-        const passwordChanged = Boolean(
-          dto.password && !String(dto.password).includes('•'),
-        );
-        if (passwordChanged) {
-          user.password = await this.hasher.hash(dto.password);
-          revoke = true;
-        }
         return { saved: await repo.save(user), revoke };
       },
     );
-    // Đổi mật khẩu, vai trò hoặc bộ phận thì đăng xuất mọi phiên đang mở của tài khoản đó.
+    // Đổi vai trò hoặc bộ phận thì đăng xuất mọi phiên đang mở của tài khoản đó.
     if (revoke) await this.sessions.revokeAllForUser(saved.id);
     return withoutPassword(saved);
   }
@@ -116,6 +120,7 @@ export class UsersService {
 
     const password = generatePassword();
     user.password = await this.hasher.hash(password);
+    user.mustChangePassword = true;
     await this.userRepository.save(user);
     await this.sessions.revokeAllForUser(user.id);
 

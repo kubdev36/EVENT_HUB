@@ -1,16 +1,19 @@
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UserBodyDto {
   @ApiProperty({ example: 'staff@company.com' })
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'mat-khau-moi', required: false })
+  /** Họ tên hiển thị. Chuỗi rỗng nghĩa là xóa tên. */
+  @ApiProperty({ example: 'Nguyễn Văn A', required: false })
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @MinLength(6)
-  password?: string;
+  @MaxLength(100, { message: 'Họ tên tối đa 100 ký tự' })
+  fullName?: string;
 
   @ApiProperty({ example: 'admin', required: false })
   @IsOptional()

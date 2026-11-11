@@ -28,6 +28,8 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from '../service/auth.service.js';
 import { LoginDto } from '../dto/login.dto.js';
+import { ChangePasswordDto } from '../dto/change-password.dto.js';
+import { AllowPendingPasswordChange } from '../decorators/allow-pending-password-change.decorator.js';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard.js';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
@@ -97,7 +99,28 @@ export class AuthController {
     return { message: 'Logged out' };
   }
 
+  /**
+   * Đổi mật khẩu của chính mình. Xong thì thu hồi mọi phiên cũ (máy khác đăng xuất) và cấp
+   * phiên mới cho trình duyệt đang dùng. Giới hạn số lần thử như đăng nhập.
+   */
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @AllowPendingPasswordChange()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đổi mật khẩu (bắt buộc khi đang dùng mật khẩu tạm)' })
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Request() req: { user: { id: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const user = await this.authService.changePassword(req.user.id, dto);
+    await this.sessions.revokeAllForUser(user.id);
+    AuthController.setSessionCookies(res, await this.sessions.issue(user));
+    return { message: 'Đã đổi mật khẩu.', user };
+  }
+
   @UseGuards(JwtAuthGuard)
+  @AllowPendingPasswordChange()
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user' })

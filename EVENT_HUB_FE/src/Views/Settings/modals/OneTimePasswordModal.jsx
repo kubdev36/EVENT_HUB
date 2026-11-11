@@ -25,7 +25,7 @@ export default function OneTimePasswordModal({ data, onClose }) {
         </div>
         <p className="text-slate-600">
           Mật khẩu của <span className="font-semibold text-slate-900">{data.email}</span>. Mật khẩu chỉ hiện một
-          lần: hãy sao chép và gửi riêng cho nhân viên.
+          lần: hãy sao chép và gửi riêng cho nhân viên. Nhân viên sẽ phải đổi mật khẩu này khi đăng nhập lần đầu.
         </p>
         <div className="flex gap-2">
           <input

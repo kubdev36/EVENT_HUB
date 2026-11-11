@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from '../Components/Sidebar';
 
-export default function Layout({ currentView, onNavigate, onLogout, user, children }) {
+export default function Layout({ currentView, onNavigate, onLogout, onChangePassword, user, children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
@@ -14,6 +14,7 @@ export default function Layout({ currentView, onNavigate, onLogout, user, childr
         onClose={() => setIsSidebarOpen(false)}
         user={user}
         onLogout={onLogout}
+        onChangePassword={onChangePassword}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">

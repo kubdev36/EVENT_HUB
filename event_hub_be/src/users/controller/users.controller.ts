@@ -33,13 +33,16 @@ export class UsersController {
 
   @Post()
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create user' })
+  @ApiOperation({
+    summary: 'Create user (mật khẩu luôn sinh ngẫu nhiên, trả về một lần)',
+  })
   @ApiBody({
     schema: {
       example: {
         email: 'staff@company.com',
-        password: 'mat-khau-moi',
+        fullName: 'Nguyễn Văn A',
         role: 'staff',
+        department: 'MKT',
       },
     },
   })
@@ -54,7 +57,6 @@ export class UsersController {
     schema: {
       example: {
         email: 'staff@company.com',
-        password: 'mat-khau-moi',
         role: 'admin',
       },
     },

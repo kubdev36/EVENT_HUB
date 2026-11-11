@@ -15,6 +15,10 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  /** Họ tên hiển thị; null với tài khoản cũ. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  fullName: string | null;
+
   @Column({ select: false })
   password: string;
 
@@ -27,6 +31,10 @@ export class User {
 
   @Column({ default: true })
   isActive: boolean;
+
+  /** Mật khẩu hiện tại do admin đặt (tạo mới, reset): phải đổi trước khi dùng hệ thống. */
+  @Column({ default: false })
+  mustChangePassword: boolean;
 
   @Column({ nullable: true, default: 'MKT' })
   department: string;

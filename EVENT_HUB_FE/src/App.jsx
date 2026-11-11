@@ -4,6 +4,8 @@ import Layout from './Layout/Layout';
 import Login from './Views/Login';
 import ErrorBoundary from './Components/ErrorBoundary';
 import { authApi, clearStoredAuth } from './API/API';
+import { PASSWORD_CHANGE_EVENT } from './API/passwordChange';
+import ChangePassword from './Views/ChangePassword';
 import { VIEW_PATHS, canAccessView, pathToView, viewToPath } from './routes';
 
 const Daily = lazy(() => import('./Views/Daily'));
@@ -73,6 +75,8 @@ function homePath(user) {
 export default function App() {
   const [isAuthed, setIsAuthed] = useState(getInitialAuth);
   const [user, setUser] = useState(getInitialUser);
+  // Người dùng tự mở màn hình đổi mật khẩu từ sidebar (không bắt buộc, có nút Hủy).
+  const [changingPassword, setChangingPassword] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const view = pathToView(location.pathname);
@@ -99,6 +103,13 @@ export default function App() {
     };
   }, [isAuthed]);
 
+  // API báo phải đổi mật khẩu (vd. admin vừa đặt lại khi đang mở app): chuyển sang màn hình đổi mật khẩu.
+  useEffect(() => {
+    const onRequired = () => setUser((u) => (u ? { ...u, mustChangePassword: true } : u));
+    window.addEventListener(PASSWORD_CHANGE_EVENT, onRequired);
+    return () => window.removeEventListener(PASSWORD_CHANGE_EVENT, onRequired);
+  }, []);
+
   // Nhớ trang đang xem (hệ thống ngoài React).
   useEffect(() => {
     if (isAuthed && view && canAccessView(user, view)) localStorage.setItem(VIEW_KEY, view);
@@ -121,6 +132,7 @@ export default function App() {
     localStorage.removeItem(VIEW_KEY);
     setIsAuthed(false);
     setUser(null);
+    setChangingPassword(false);
     navigate('/', { replace: true });
   };
 
@@ -128,11 +140,29 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
+  // Còn mật khẩu tạm: chỉ hiện màn hình đổi mật khẩu (backend cũng chặn mọi API khác).
+  if (user?.mustChangePassword || changingPassword) {
+    return (
+      <ChangePassword
+        user={user}
+        required={Boolean(user?.mustChangePassword)}
+        onDone={(nextUser) => {
+          localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+          setUser(nextUser);
+          setChangingPassword(false);
+        }}
+        onCancel={() => setChangingPassword(false)}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   return (
     <Layout
       currentView={view ?? 'overview'}
       onNavigate={(id) => navigate(viewToPath(id))}
       onLogout={handleLogout}
+      onChangePassword={() => setChangingPassword(true)}
       user={user}
     >
       {/* key theo đường dẫn: chuyển trang thì Error Boundary bắt đầu lại, lỗi trang cũ không đi theo. */}

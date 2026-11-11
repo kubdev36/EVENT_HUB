@@ -27,7 +27,8 @@ export default function UsersTab({
             className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50 transition"
           >
             <div className="min-w-0">
-              <div className="font-bold text-slate-900 truncate">{u.name}</div>
+              {/* Tài khoản cũ chưa có họ tên: hiện email làm tên. */}
+              <div className="font-bold text-slate-900 truncate">{u.name || u.email}</div>
               <div className="text-[10px] sm:text-[11px] text-slate-400 truncate mt-0.5">
                 {u.email} • {u.department?.toUpperCase() || 'MKT'}
               </div>

@@ -13,7 +13,8 @@ import { REFRESH_MAX_AGE_MS } from '../session-cookie.js';
  */
 const CONCURRENT_REFRESH_GRACE_MS = 15_000;
 
-export type SessionUser = Pick<User, 'id' | 'email' | 'role' | 'department'>;
+export type SessionUser = Pick<User, 'id' | 'email' | 'role' | 'department'> &
+  Partial<Pick<User, 'mustChangePassword'>>;
 export type IssuedSession = {
   accessToken: string;
   refreshToken: string;
@@ -67,6 +68,7 @@ export class SessionService {
         email: user.email,
         role: user.role,
         department: user.department,
+        mustChangePassword: Boolean(user.mustChangePassword),
       },
     };
   }

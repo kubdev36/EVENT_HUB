@@ -33,7 +33,7 @@ export default function UserModal({
           {isReset ? (
             <div className="space-y-2 py-1">
               <div className="text-slate-600">
-                ĐẶT LẠI MẬT KHẨU CHO: <span className="font-bold text-slate-900">{selectedUser?.name}</span>
+                ĐẶT LẠI MẬT KHẨU CHO: <span className="font-bold text-slate-900">{selectedUser?.name || selectedUser?.email}</span>
               </div>
               <p className="text-slate-500">
                 Hệ thống sẽ tạo mật khẩu ngẫu nhiên và hiện một lần sau khi xác nhận. Mọi phiên đăng nhập của tài
@@ -55,25 +55,24 @@ export default function UserModal({
 
               <div className="space-y-1">
                 <label className="font-semibold text-slate-700">Email:</label>
+                {/* Email là tên đăng nhập: backend không đổi email khi sửa, nên chỉ cho xem. */}
                 <input
                   type="email"
                   value={formData.email || ''}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  readOnly={!isAdd}
+                  title={isAdd ? undefined : 'Không đổi được email của tài khoản đã tạo'}
                   placeholder="email@company.com"
-                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
+                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px] read-only:bg-slate-50 read-only:text-slate-500"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Mật khẩu:</label>
-                <input
-                  type="text"
-                  value={formData.password || ''}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder={isAdd ? 'Nhập mật khẩu tài khoản' : 'Để trống nếu không đổi'}
-                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500 font-mono text-[11px]"
-                />
-              </div>
+              {isAdd && (
+                <p className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-[11px] text-slate-600">
+                  Hệ thống sẽ tạo mật khẩu ngẫu nhiên và hiện một lần sau khi lưu. Nhân viên phải đổi mật khẩu khi
+                  đăng nhập lần đầu.
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
