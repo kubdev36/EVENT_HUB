@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { Repository } from 'typeorm';
@@ -15,6 +19,9 @@ type RequestUser = {
   role: Role;
   department?: string | null;
 };
+
+/** Nguồn của chính công ty, không nằm trong crawler_sources. */
+const OWN_SOURCE = { id: 'minhtuan', name: 'Minh Tuấn Mobile' };
 
 type DepartmentRule = {
   type?: string;
@@ -39,10 +46,9 @@ export class EventsService {
       );
     }
 
-    const sourceId = data.sourceId || 'minhtuan';
-    const sourceName =
-      data.sourceName ||
-      (sourceId === 'minhtuan' ? 'Minh Tuấn Mobile' : 'Manual');
+    const sourceId = data.sourceId || OWN_SOURCE.id;
+    // Tên nguồn lấy từ cấu hình, không lấy từ người gửi: tránh tạo bài giả danh nguồn không có thật.
+    const sourceName = await this.resolveSourceName(sourceId);
     const now = new Date();
     const defaultTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -58,7 +64,7 @@ export class EventsService {
       eventDate: data.eventDate ? new Date(data.eventDate) : now,
       eventTime: data.eventTime ?? defaultTime,
       type: data.type,
-      rawData: { origin: 'manual' },
+      rawData: { origin: 'manual', createdBy: user?.email ?? null },
       contentHash: this.buildManualContentHash(
         sourceId,
         data.url || '',
@@ -76,6 +82,27 @@ export class EventsService {
       await this.outbox.enqueue([saved.id], m);
       return saved;
     });
+  }
+
+  /** Nguồn của bài nhập tay phải là nguồn nhà hoặc nguồn có trong crawler_sources. */
+  private async resolveSourceName(sourceId: string): Promise<string> {
+    if (sourceId === OWN_SOURCE.id) return OWN_SOURCE.name;
+    const setting = await this.settingRepository.findOne({
+      where: { key: 'crawler_sources' },
+    });
+    const value = setting?.value as unknown;
+    const list = Array.isArray(value)
+      ? value
+      : ((value as { targets?: unknown[]; sources?: unknown[] } | undefined)
+          ?.targets ??
+        (value as { sources?: unknown[] } | undefined)?.sources ??
+        []);
+    const found = (list as Array<Record<string, unknown>>).find(
+      (s) => s.id === sourceId,
+    );
+    if (!found)
+      throw new BadRequestException('Nguồn không tồn tại trong cấu hình.');
+    return typeof found.name === 'string' && found.name ? found.name : sourceId;
   }
 
   private buildManualContentHash(

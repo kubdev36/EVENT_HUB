@@ -35,15 +35,10 @@ export default function UserModal({
               <div className="text-slate-600">
                 ĐẶT LẠI MẬT KHẨU CHO: <span className="font-bold text-slate-900">{selectedUser?.name}</span>
               </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Mật khẩu mới mặc định:</label>
-                <input
-                  type="text"
-                  defaultValue="EventHub@2026"
-                  className="w-full h-8.5 rounded-lg border border-slate-200 px-3 font-mono text-slate-700 bg-slate-50"
-                  readOnly
-                />
-              </div>
+              <p className="text-slate-500">
+                Hệ thống sẽ tạo mật khẩu ngẫu nhiên và hiện một lần sau khi xác nhận. Mọi phiên đăng nhập của tài
+                khoản này sẽ bị đăng xuất.
+              </p>
             </div>
           ) : (
             <>

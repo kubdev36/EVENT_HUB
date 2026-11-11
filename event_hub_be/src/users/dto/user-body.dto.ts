@@ -6,7 +6,7 @@ export class UserBodyDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'EventHub@2026', required: false })
+  @ApiProperty({ example: 'mat-khau-moi', required: false })
   @IsOptional()
   @IsString()
   @MinLength(6)

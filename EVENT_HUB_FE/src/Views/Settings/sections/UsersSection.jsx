@@ -3,9 +3,9 @@ import { usersApi } from '../../../API/API';
 import UsersTab from '../tabs/UsersTab';
 import UserModal from '../modals/UserModal';
 import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
+import OneTimePasswordModal from '../modals/OneTimePasswordModal';
 import { useModalState } from './useModalState';
 
-const DEFAULT_PASSWORD = 'EventHub@2026';
 const MASKED = '••••••••';
 
 const toRow = (u) => ({
@@ -20,6 +20,8 @@ const toRow = (u) => ({
 /** Tab "Tài khoản nhân viên": danh sách, thêm, sửa, xóa, đặt lại mật khẩu. */
 export default function UsersSection({ departmentsList, notify }) {
   const [users, setUsers] = useState([]);
+  // Mật khẩu máy chủ vừa sinh (tạo tài khoản không nhập mật khẩu, hoặc đặt lại): chỉ giữ trong bộ nhớ.
+  const [oneTime, setOneTime] = useState(null);
   const modal = useModalState();
   const defaultDept = departmentsList[0]?.code || 'mkt';
 
@@ -49,7 +51,8 @@ export default function UsersSection({ departmentsList, notify }) {
     modal.run(async () => {
       const f = modal.formData;
       if (modal.mode === 'add') {
-        await usersApi.create({ ...payload(f), password: f.password || DEFAULT_PASSWORD });
+        const { data } = await usersApi.create({ ...payload(f), password: f.password || undefined });
+        if (data?.generatedPassword) setOneTime({ email: f.email, password: data.generatedPassword });
         notify(`Đã thêm nhân viên ${f.email}.`);
       } else if (modal.mode === 'edit') {
         // Ô mật khẩu còn giá trị che (••••) nghĩa là không đổi mật khẩu.
@@ -57,8 +60,9 @@ export default function UsersSection({ departmentsList, notify }) {
         await usersApi.update(modal.item.id, { ...payload(f), password });
         notify(`Đã cập nhật nhân viên ${f.email}.`);
       } else if (modal.mode === 'reset-pass') {
-        await usersApi.resetPassword(modal.item.id);
-        notify(`Đã đặt lại mật khẩu cho ${modal.item.email} thành ${DEFAULT_PASSWORD}.`);
+        const { data } = await usersApi.resetPassword(modal.item.id);
+        setOneTime({ email: modal.item.email, password: data.password });
+        notify(`Đã đặt lại mật khẩu cho ${modal.item.email}.`);
         return;
       }
       await reload();
@@ -99,6 +103,7 @@ export default function UsersSection({ departmentsList, notify }) {
         onConfirm={remove}
         saving={modal.saving}
       />
+      <OneTimePasswordModal data={oneTime} onClose={() => setOneTime(null)} />
     </>
   );
 }

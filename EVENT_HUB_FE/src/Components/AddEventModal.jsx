@@ -77,7 +77,7 @@ export default function AddEventModal({ onClose, onSuccess, defaultBrandId = 'mi
         title: title.trim(),
         description: description.trim() || undefined,
         eventDate: eventDate ? `${eventDate}T00:00:00.000Z` : undefined,
-        eventTime,
+        eventTime: eventTime || undefined,
         image: image.trim() || undefined,
         url: url.trim() || undefined,
       });

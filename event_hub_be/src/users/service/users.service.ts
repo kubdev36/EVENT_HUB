@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../../auth/enums/role.enum.js';
@@ -42,67 +43,130 @@ export class UsersService {
   }
 
   async create(dto: any) {
+    const role = dto.role === undefined ? Role.STAFF : parseRole(dto.role);
+    if (!role) throw new BadRequestException(INVALID_ROLE);
+
     const email = dto.email.trim().toLowerCase();
     const existing = await this.userRepository.findOne({ where: { email } });
-
     if (existing) {
-      throw new BadRequestException('Email already exists.');
+      throw new BadRequestException('Email đã tồn tại.');
     }
 
-    const hashedPassword = await this.hasher.hash(
-      dto.password || 'EventHub@2026',
-    );
+    // Không nhập mật khẩu thì sinh ngẫu nhiên, chỉ trả về một lần trong response này.
+    const generated = dto.password ? null : generatePassword();
     const user = this.userRepository.create({
       email,
-      password: hashedPassword,
-      role: dto.role?.toLowerCase() === 'admin' ? Role.ADMIN : Role.STAFF,
+      password: await this.hasher.hash(dto.password || generated),
+      role,
       department: dto.department || 'MKT',
     });
 
-    return withoutPassword(await this.userRepository.save(user));
+    const saved = withoutPassword(await this.userRepository.save(user));
+    return generated ? { ...saved, generatedPassword: generated } : saved;
   }
 
-  async update(id: string, dto: any) {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) throw new NotFoundException('Account not found.');
+  /** actorId: admin đang thao tác; không được tự hạ quyền, và luôn phải còn ít nhất một admin. */
+  async update(id: string, dto: any, actorId?: string) {
+    const nextRole = dto.role === undefined ? undefined : parseRole(dto.role);
+    if (nextRole === null) throw new BadRequestException(INVALID_ROLE);
 
-    if (dto.role) {
-      user.role = dto.role.toLowerCase() === 'admin' ? Role.ADMIN : Role.STAFF;
-    }
+    const { saved, revoke } = await this.userRepository.manager.transaction(
+      async (em) => {
+        const repo = em.getRepository(User);
+        const user = await repo.findOne({ where: { id } });
+        if (!user) throw new NotFoundException('Không tìm thấy tài khoản.');
 
-    if (dto.department) {
-      user.department = dto.department;
-    }
+        let revoke = false;
+        if (nextRole && nextRole !== user.role) {
+          if (user.role === Role.ADMIN) {
+            if (id === actorId)
+              throw new BadRequestException(
+                'Không thể tự hạ quyền admin của chính mình.',
+              );
+            await assertAnotherAdmin(repo, id);
+          }
+          user.role = nextRole;
+          revoke = true;
+        }
 
-    const passwordChanged = Boolean(
-      dto.password && !String(dto.password).includes('•'),
+        if (dto.department && dto.department !== user.department) {
+          user.department = dto.department;
+          revoke = true;
+        }
+
+        const passwordChanged = Boolean(
+          dto.password && !String(dto.password).includes('•'),
+        );
+        if (passwordChanged) {
+          user.password = await this.hasher.hash(dto.password);
+          revoke = true;
+        }
+        return { saved: await repo.save(user), revoke };
+      },
     );
-    if (passwordChanged) {
-      user.password = await this.hasher.hash(dto.password);
-    }
-
-    const saved = await this.userRepository.save(user);
-    // Đổi mật khẩu thì đăng xuất mọi phiên đang mở của tài khoản đó.
-    if (passwordChanged) await this.sessions.revokeAllForUser(user.id);
+    // Đổi mật khẩu, vai trò hoặc bộ phận thì đăng xuất mọi phiên đang mở của tài khoản đó.
+    if (revoke) await this.sessions.revokeAllForUser(saved.id);
     return withoutPassword(saved);
   }
 
+  /** Đặt mật khẩu ngẫu nhiên mới; chỉ trả về một lần cho admin, không ghi log. */
   async resetPassword(id: string) {
     const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) throw new NotFoundException('Account not found.');
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản.');
 
-    user.password = await this.hasher.hash('EventHub@2026');
+    const password = generatePassword();
+    user.password = await this.hasher.hash(password);
     await this.userRepository.save(user);
     await this.sessions.revokeAllForUser(user.id);
 
-    return { message: 'Password reset successfully to EventHub@2026' };
+    return { message: 'Đã đặt lại mật khẩu.', password };
   }
 
-  async delete(id: string) {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) throw new NotFoundException('Account not found.');
-
-    await this.userRepository.delete(id);
-    return { message: 'Account deleted successfully.' };
+  async delete(id: string, actorId?: string) {
+    await this.userRepository.manager.transaction(async (em) => {
+      const repo = em.getRepository(User);
+      const user = await repo.findOne({ where: { id } });
+      if (!user) throw new NotFoundException('Không tìm thấy tài khoản.');
+      if (id === actorId)
+        throw new BadRequestException('Không thể tự xóa tài khoản của chính mình.');
+      if (user.role === Role.ADMIN) await assertAnotherAdmin(repo, id);
+      await repo.delete(id);
+    });
+    return { message: 'Đã xóa tài khoản.' };
   }
+}
+
+const INVALID_ROLE = 'Vai trò không hợp lệ (chỉ nhận admin hoặc staff).';
+
+function parseRole(value: unknown): Role | null {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (v === Role.ADMIN) return Role.ADMIN;
+  if (v === Role.STAFF) return Role.STAFF;
+  return null;
+}
+
+/**
+ * Khóa các dòng admin đang hoạt động (FOR UPDATE) rồi kiểm tra còn admin khác ngoài excludeId.
+ * Khóa giúp hai yêu cầu hạ quyền/xóa chạy song song không cùng lọt qua.
+ */
+async function assertAnotherAdmin(repo: Repository<User>, excludeId: string) {
+  const admins = await repo
+    .createQueryBuilder('u')
+    .select(['u.id'])
+    .where('u.role = :role AND u.isActive = true', { role: Role.ADMIN })
+    .setLock('pessimistic_write')
+    .getMany();
+  if (!admins.some((a) => a.id !== excludeId))
+    throw new BadRequestException('Phải còn ít nhất một admin đang hoạt động.');
+}
+
+const PASSWORD_CHARS =
+  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+
+/** Mật khẩu ngẫu nhiên từ crypto.randomInt, bỏ ký tự dễ nhầm (0/O, 1/l/I). */
+export function generatePassword(length = 12): string {
+  let out = '';
+  for (let i = 0; i < length; i++)
+    out += PASSWORD_CHARS[randomInt(PASSWORD_CHARS.length)];
+  return out;
 }

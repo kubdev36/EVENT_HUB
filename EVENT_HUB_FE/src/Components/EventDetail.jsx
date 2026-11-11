@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Clock, FileEdit, ExternalLink } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
-import { safeHttpUrl } from '../Views/dashboard/shared';
+import { openSafe, safeHttpUrl } from '../Views/dashboard/shared';
 
 export default function EventDetail({ data, onClose }) {
   const [activeTab, setActiveTab] = useState('events');
@@ -134,7 +134,7 @@ export default function EventDetail({ data, onClose }) {
 
                 {event.image && (
                   <div
-                    onClick={() => event.url && window.open(event.url, '_blank')}
+                    onClick={() => openSafe(event.url)}
                     title="Bấm để xem bài viết gốc"
                     className="mt-2.5 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-2xs cursor-pointer hover:border-blue-400 hover:shadow-xs transition group"
                   >

@@ -101,8 +101,16 @@ export class EventNotifierService {
       : '';
     const safeUrl = /^https?:\/\//i.test(event.url || '') ? event.url : '';
 
+    const createdBy =
+      event.origin === 'manual' && typeof event.rawData?.createdBy === 'string'
+        ? event.rawData.createdBy
+        : '';
     const lines = [
       '<b>🔔 SỰ KIỆN ĐỐI THỦ MỚI</b>',
+      // Bài nhập tay ghi rõ người nhập để không bị hiểu nhầm là bài crawl được.
+      event.origin === 'manual'
+        ? `📝 <i>Nhập tay${createdBy ? ` bởi ${escapeHtml(createdBy)}` : ''}</i>`
+        : '',
       `<b>Thương hiệu:</b> ${escapeHtml(event.sourceName)}`,
       `<b>Tiêu đề:</b> ${escapeHtml(event.title)}`,
       `<b>Loại sự kiện:</b> ${escapeHtml(event.type)}`,

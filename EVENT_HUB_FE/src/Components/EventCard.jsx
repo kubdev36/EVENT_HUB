@@ -1,6 +1,7 @@
 import { Clock, ChevronRight } from 'lucide-react';
 import { CATEGORY_STYLES } from '../constants/eventStyles';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { openSafe } from '../Views/dashboard/shared';
 
 export default function EventCard({ data, onOpenDetail }) {
   const logoUrl = data?.logo || '/img/mtm.png';
@@ -50,9 +51,7 @@ export default function EventCard({ data, onOpenDetail }) {
                 key={event.id}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (event.url) {
-                    window.open(event.url, '_blank');
-                  } else {
+                  if (!openSafe(event.url)) {
                     onOpenDetail?.(data);
                   }
                 }}
