@@ -12,6 +12,7 @@ import { Event } from '../entity/event.entity.js';
 import { Setting } from '../../settings/entity/setting.entity.js';
 import { Role } from '../../auth/enums/role.enum.js';
 import { expandEventType } from '../event-types.js';
+import { allowedEventTypes } from '../event-type-config.js';
 
 type RequestUser = {
   id: string;
@@ -39,6 +40,18 @@ export class EventsService {
   ) {}
 
   async createManualEvent(data: CreateEventDto, user?: RequestUser) {
+    const rules = await this.settingRepository.findOne({
+      where: { key: 'keyword_rules' },
+    });
+    const ruleValue = rules?.value as unknown;
+    const allowed = allowedEventTypes(
+      Array.isArray(ruleValue)
+        ? ruleValue
+        : (ruleValue as { rules?: unknown } | undefined)?.rules,
+    );
+    if (!allowed.has(data.type))
+      throw new BadRequestException('Loại sự kiện không có trong cấu hình.');
+
     const allowedTypes = await this.getAllowedTypes(user);
     if (allowedTypes && !allowedTypes.includes(data.type)) {
       throw new ForbiddenException(

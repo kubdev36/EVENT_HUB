@@ -57,8 +57,9 @@ export class ClassifierService {
       .trim();
   }
 
+  /** Mã loại lấy nguyên từ cấu hình (đã kiểm tra khi lưu); không bỏ dấu "_" như normalize(). */
   private normalizeType(type: string) {
-    const value = this.normalize(type);
+    const value = (type || '').trim().toLowerCase();
 
     return value || null;
   }

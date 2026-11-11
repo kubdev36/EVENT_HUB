@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsIn,
   IsISO8601,
   IsNotEmpty,
   IsOptional,
@@ -12,9 +11,10 @@ import {
 const HTTP_URL = /^https?:\/\/[^\s]+$/i;
 
 export class CreateEventDto {
-  @ApiProperty({ example: 'release', enum: ['release', 'sale', 'livestream', 'ads', 'promo', 'live', 'internal', 'other'] })
+  /** Loại phải có trong cấu hình (tab Từ khóa phân loại); EventsService kiểm tra khi tạo. */
+  @ApiProperty({ example: 'promo' })
   @IsString()
-  @IsIn(['release', 'sale', 'livestream', 'ads', 'promo', 'live', 'internal', 'other'])
+  @Matches(/^[a-z][a-z0-9_]{1,29}$/, { message: 'Loại sự kiện không hợp lệ' })
   type: string;
 
   @ApiProperty({ example: 'Samsung ra mắt Galaxy S26' })

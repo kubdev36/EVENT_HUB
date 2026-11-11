@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { settingsApi } from '../../../API/API';
+import { useEventTypes } from '../../../API/useEventTypes';
+import { mergeDepartmentRules } from './departmentRules';
 import DepartmentsTab from '../tabs/DepartmentsTab';
 import DepartmentModal from '../modals/DepartmentModal';
 import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
@@ -10,7 +12,12 @@ import { ValidationError, useModalState } from './useModalState';
  * và loại bài mỗi phòng ban được xem.
  */
 export default function DepartmentsSection({ departmentsList, setDepartmentsList, initialRules, notify }) {
-  const [rules, setRules] = useState(initialRules);
+  const [rawRules, setRawRules] = useState(initialRules);
+  // Mỗi loại đang cấu hình có một dòng, kể cả loại vừa thêm ở tab Từ khóa phân loại.
+  const { types: eventTypes } = useEventTypes();
+  const rules = useMemo(() => mergeDepartmentRules(rawRules, eventTypes), [rawRules, eventTypes]);
+  const setRules = (update) =>
+    setRawRules((prev) => (typeof update === 'function' ? update(mergeDepartmentRules(prev, eventTypes)) : update));
   const [savingRules, setSavingRules] = useState(false);
   const modal = useModalState();
 
@@ -31,7 +38,7 @@ export default function DepartmentsSection({ departmentsList, setDepartmentsList
       await persist(departmentsList, rules);
       notify('Đã lưu phân loại và danh sách phòng ban thành công.');
     } catch (err) {
-      notify(err.response?.data?.message || 'Lưu phân loại phòng ban thất bại.');
+      notify(err.response?.data?.message || 'Lưu phân loại phòng ban thất bại.', 'error');
     } finally {
       setSavingRules(false);
     }

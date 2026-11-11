@@ -1,9 +1,10 @@
 import { Clock, ChevronRight } from 'lucide-react';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { useEventTypes } from '../API/useEventTypes';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { openSafe } from '../Views/dashboard/shared';
 
 export default function EventCard({ data, onOpenDetail }) {
+  const { styleOf } = useEventTypes();
   const logoUrl = data?.logo || '/img/mtm.png';
 
   return (
@@ -45,7 +46,7 @@ export default function EventCard({ data, onOpenDetail }) {
       <div className="p-2.5 sm:p-3 flex-1 min-w-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2.5">
           {data.events.map((event) => {
-            const style = CATEGORY_STYLES[event.type] || CATEGORY_STYLES.release;
+            const style = styleOf(event.type);
             return (
               <div
                 key={event.id}
@@ -114,8 +115,7 @@ export default function EventCard({ data, onOpenDetail }) {
           <div className="space-y-1.5 text-[11px] font-medium text-slate-600">
             {Object.entries(data.stats || {}).map(([key, count]) => {
               if (!count) return null;
-              const style = CATEGORY_STYLES[key];
-              if (!style) return null;
+              const style = styleOf(key);
               return (
                 <div key={key} className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />

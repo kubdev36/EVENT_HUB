@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { X, Clock, FileEdit, ExternalLink } from 'lucide-react';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { useEventTypes } from '../API/useEventTypes';
 import { openSafe, safeHttpUrl } from '../Views/dashboard/shared';
 
 export default function EventDetail({ data, onClose }) {
+  const { styleOf } = useEventTypes();
   const [activeTab, setActiveTab] = useState('events');
 
   if (!data) return null;
@@ -90,7 +91,7 @@ export default function EventDetail({ data, onClose }) {
 
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-5 sm:space-y-6">
           {data.events.map((event) => {
-            const style = CATEGORY_STYLES[event.type] || CATEGORY_STYLES.release;
+            const style = styleOf(event.type);
             return (
               <div key={event.id} className="relative pl-4 sm:pl-5 border-l-2 border-slate-200">
                 <span

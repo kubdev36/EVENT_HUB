@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ChevronLeft, ChevronRight, ChevronDown, X, ExternalLink, Calendar as CalendarIcon, Clock } from 'lucide-react';
-import { CATEGORY_STYLES } from '../constants/eventStyles';
+import { useEventTypes } from '../API/useEventTypes';
 import { useRangeEvents } from '../API/useDashboardEvents';
 import DayEventsModal from './month/DayEventsModal';
 import { buildCalendarDays } from './month/calendar';
@@ -16,6 +16,7 @@ const MAX_SHOW_EVENTS = 2;
 import { useFilterContext } from '../context/useFilterContext';
 
 export default function Month() {
+  const { styleOf, types: eventTypes } = useEventTypes();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [selectedDayEvents, setSelectedDayEvents] = useState(null);
@@ -83,7 +84,11 @@ export default function Month() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1 sm:pb-0 text-xs">
-          {Object.entries(CATEGORY_STYLES).slice(0, 5).map(([key, style]) => (
+          {/* Chú thích màu theo các loại đang cấu hình (bỏ "nội bộ"). */}
+          {eventTypes
+            .filter((t) => t.type !== 'internal')
+            .map((t) => [t.type, styleOf(t.type)])
+            .map(([key, style]) => (
             <div key={key} className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs text-gray-600 font-medium whitespace-nowrap">
               <span className={`w-2 h-2 rounded-full shrink-0 ${style.dot}`} />
               <span>{style.label}</span>
@@ -117,7 +122,7 @@ export default function Month() {
 
               <div className="flex flex-col gap-1 min-h-0 overflow-hidden flex-1">
                 {visibleEvents.map((ev) => {
-                  const style = CATEGORY_STYLES[ev.type] || CATEGORY_STYLES.promo;
+                  const style = styleOf(ev.type);
                   return (
                     <button
                       key={ev.id}
@@ -205,8 +210,8 @@ export default function Month() {
                   )}
                   <span className="text-xs font-bold text-gray-700">{selectedEvent.brand}</span>
                 </div>
-                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded font-medium ${CATEGORY_STYLES[selectedEvent.type]?.pill}`}>
-                  {CATEGORY_STYLES[selectedEvent.type]?.label}
+                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded font-medium ${styleOf(selectedEvent.type).pill}`}>
+                  {styleOf(selectedEvent.type).label}
                 </span>
               </div>
 

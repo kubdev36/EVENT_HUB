@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, X } from 'lucide-react';
-import { CATEGORY_STYLES } from '../../constants/eventStyles';
+import { useEventTypes } from '../../API/useEventTypes';
 import { safeHttpUrl } from '../dashboard/shared';
 
 const WEEKDAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -131,7 +131,8 @@ function FilterChip({ active, onClick, label, count, logo }) {
 }
 
 function EventRow({ ev, onSelect }) {
-  const style = CATEGORY_STYLES[ev.type] || CATEGORY_STYLES.promo;
+  const { styleOf } = useEventTypes();
+  const style = styleOf(ev.type);
   const href = safeHttpUrl(ev.url);
   return (
     <li className="group flex items-start gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50 transition">
